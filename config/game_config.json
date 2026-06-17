@@ -1,0 +1,50 @@
+{
+  "game": {
+    "min_players": 2,
+    "max_players": 10,
+    "default_stack": 10000,
+    "small_blind": 50,
+    "big_blind": 100,
+    "ante": 0,
+    "human_timeout_ms": 30000,
+    "agent_timeout_ms": 20000,
+    "auto_fold_on_timeout": true
+  },
+  "monte_carlo": {
+    "simulations": 5000,
+    "worker_count": 4,
+    "cache_ttl_seconds": 60
+  },
+  "memory": {
+    "recent_hands_limit": 20,
+    "compress_at_count": 50,
+    "opponent_timeline_limit": 20
+  },
+  "llm": {
+    "provider": "deepseek",
+    "api_key_env": "DEEPSEEK_API_KEY",
+    "base_url": "https://api.deepseek.com",
+    "models": {
+      "flash": "deepseek-v4-flash",
+      "pro": "deepseek-v4-pro"
+    },
+    "phase_model_map": {
+      "pre_flop": "deepseek-v4-flash",
+      "flop": "deepseek-v4-flash",
+      "turn": "deepseek-v4-pro",
+      "river": "deepseek-v4-pro",
+      "showdown": "deepseek-v4-pro",
+      "memory_compressor": "deepseek-v4-flash"
+    },
+    "default_model": "deepseek-v4-flash",
+    "max_tokens": 400,
+    "stream": true,
+    "timeout_seconds": 20
+  },
+  "ui": {
+    "theme": "dark",
+    "show_agent_thinking": true,
+    "animation_speed": "normal",
+    "card_style": "standard"
+  }
+}
