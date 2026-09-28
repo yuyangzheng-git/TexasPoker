@@ -6,6 +6,7 @@ import re
 import asyncio
 import os
 import json
+from pathlib import Path
 from typing import Optional, Callable
 from openai import AsyncOpenAI
 
@@ -15,8 +16,9 @@ from agent_engine import (
     AgentMemory, ParsedResponse, PromptBuilder, calculate_pot_odds, evaluate_preflop_hand
 )
 
-# 加载全局配置
-with open("../config/game_config.json") as _f:
+# 加载全局配置（基于本文件位置，与运行目录无关）
+_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+with open(_CONFIG_DIR / "game_config.json", encoding="utf-8") as _f:
     _game_cfg = json.load(_f)
 MC_SIMULATIONS = _game_cfg.get("monte_carlo", {}).get("simulations", 5000)
 
@@ -167,24 +169,28 @@ class LLMAgent:
         print(f"[{self.config['name']}] phase={game.phase.value}  model={model}")
 
         try:
-            raw = await asyncio.wait_for(
+            raw, usage = await asyncio.wait_for(
                 self._call_api(prompt, model, on_chunk),
                 timeout=timeout
             )
-            return ResponseParser.parse(raw, self.player, game)
+            parsed = ResponseParser.parse(raw, self.player, game)
+            parsed.usage = usage
+            return parsed
 
         except asyncio.TimeoutError:
             fallback = ResponseParser._fallback_action(self.player, game)
             return ParsedResponse(
                 thinking=f"（{model} 超时，自动决策）",
-                action=fallback, speech=""
+                action=fallback, speech="",
+                fallback_reason="timeout",
             )
         except Exception as e:
             print(f"[LLMAgent:{self.config['name']}] API error: {e}")
             fallback = ResponseParser._fallback_action(self.player, game)
             return ParsedResponse(
                 thinking=f"（API 错误，自动决策: {str(e)[:40]}）",
-                action=fallback, speech=""
+                action=fallback, speech="",
+                fallback_reason=f"api_error:{str(e)[:60]}",
             )
 
     async def _call_api(
@@ -192,10 +198,11 @@ class LLMAgent:
         prompt: str,
         model: str,
         on_chunk: Optional[Callable] = None
-    ) -> str:
+    ) -> tuple:
         """
         调用 Claude OpenAI 兼容 API
         system: 固定人格 + 德州扑克规则  |  user: 动态牌局状态
+        返回 (文本, usage字典或None)
         """
         # 完整的德州扑克规则系统提示
         poker_rules = """
@@ -300,6 +307,7 @@ class LLMAgent:
         ]
 
         full = ""
+        usage = None
 
         if on_chunk:
             stream = await self.client.chat.completions.create(
@@ -308,12 +316,19 @@ class LLMAgent:
                 temperature=self.temperature,
                 max_tokens=600,
                 stream=True,
+                stream_options={"include_usage": True},
             )
             async for chunk in stream:
-                delta = chunk.choices[0].delta.content
+                delta = chunk.choices[0].delta.content if chunk.choices else None
                 if delta:
                     full += delta
                     on_chunk(self.player.id, delta)
+                if getattr(chunk, "usage", None):
+                    usage = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": chunk.usage.completion_tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                    }
         else:
             resp = await self.client.chat.completions.create(
                 model=model,
@@ -323,8 +338,14 @@ class LLMAgent:
                 stream=False,
             )
             full = resp.choices[0].message.content or ""
+            if getattr(resp, "usage", None):
+                usage = {
+                    "prompt_tokens": resp.usage.prompt_tokens,
+                    "completion_tokens": resp.usage.completion_tokens,
+                    "total_tokens": resp.usage.total_tokens,
+                }
 
-        return full
+        return full, usage
 
     def update_memory(self, won: bool, amount: float):
         self.memory.record_result(won, amount)

@@ -8,13 +8,16 @@ from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
+# 默认日志目录（基于本文件位置，与运行目录无关）
+DEFAULT_LOG_DIR = Path(__file__).resolve().parent.parent / "logs"
+
 
 class GameLogger:
     """游戏日志记录器 - 为每个游戏会话创建详细日志"""
 
-    def __init__(self, game_id: str, log_dir: str = "../logs"):
+    def __init__(self, game_id: str, log_dir: Optional[str] = None):
         self.game_id = game_id
-        self.log_dir = Path(log_dir)
+        self.log_dir = Path(log_dir) if log_dir else DEFAULT_LOG_DIR
         self.log_dir.mkdir(parents=True, exist_ok=True)
 
         # 创建日志文件名：日期_时间_游戏ID.json

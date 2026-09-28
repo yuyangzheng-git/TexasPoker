@@ -21,17 +21,21 @@ class CardSuit(IntEnum):
     CLUB = 3
 
 class HandRank(IntEnum):
-    """手牌牌型排名"""
+    """手牌牌型排名
+
+    牌型基础分值间隔 1,000,000，保证任何 kicker 编码（< 1,000,000）
+    都不会跨越到更高牌型，从而保证分数全序正确。
+    """
     HIGH_CARD = 0
-    ONE_PAIR = 1000
-    TWO_PAIR = 2000
-    THREE_OF_A_KIND = 3000
-    STRAIGHT = 4000
-    FLUSH = 5000
-    FULL_HOUSE = 6000
-    FOUR_OF_A_KIND = 7000
-    STRAIGHT_FLUSH = 8000
-    ROYAL_FLUSH = 9000
+    ONE_PAIR = 1_000_000
+    TWO_PAIR = 2_000_000
+    THREE_OF_A_KIND = 3_000_000
+    STRAIGHT = 4_000_000
+    FLUSH = 5_000_000
+    FULL_HOUSE = 6_000_000
+    FOUR_OF_A_KIND = 7_000_000
+    STRAIGHT_FLUSH = 8_000_000
+    ROYAL_FLUSH = 9_000_000
 
 
 class Card:
@@ -39,6 +43,14 @@ class Card:
     def __init__(self, rank: int, suit: int):
         self.rank = rank  # 1-13, 1=A, 13=K
         self.suit = suit  # 0-3
+
+    def __eq__(self, other):
+        if not isinstance(other, Card):
+            return NotImplemented
+        return self.rank == other.rank and self.suit == other.suit
+
+    def __hash__(self):
+        return hash((self.rank, self.suit))
 
     def __repr__(self):
         rank_names = {1: 'A', 11: 'J', 12: 'Q', 13: 'K'}
@@ -59,14 +71,26 @@ class HandEvaluator:
     """德州扑克手牌评估器"""
 
     @staticmethod
+    def _tiebreak(digits: List[int]) -> int:
+        """将排序后的点数列表编码为 0-999,999 内的唯一值
+
+        使用 15 进制（点数 2-14 → 数字 1-13），最大 5 位：
+        13 * (15^4 + 15^3 + 15^2 + 15 + 1) = 542,581 < 1,000,000
+        """
+        value = 0
+        for d in digits:
+            value = value * 15 + (d - 1)
+        return value
+
+    @staticmethod
     def evaluate_5_cards(cards: List[Card]) -> Tuple[int, List[int]]:
         """
         评估单一5张手牌组合
         返回 (总分, 拆分列表用于对比)
 
         总分结构：
-        - 前4位：牌型分值 (0-9000)
-        - 后续：Kicker 按降序排列
+        - 高位：牌型基础分值（间隔 1,000,000）
+        - 低位：kicker 的 15 进制编码，保证同牌型内全序正确
         """
         if len(cards) != 5:
             raise ValueError("Must evaluate exactly 5 cards")
@@ -91,17 +115,19 @@ class HandEvaluator:
             # 四条
             quad_rank = [r for r, c in rank_counts.items() if c == 4][0]
             kicker = [r for r in ranks if r != quad_rank]
-            return (HandRank.FOUR_OF_A_KIND + quad_rank * 100, [quad_rank, kicker[0]])
+            return (HandRank.FOUR_OF_A_KIND + quad_rank * 100 + kicker[0],
+                    [quad_rank, kicker[0]])
 
         if 3 in rank_counts.values() and 2 in rank_counts.values():
             # 葫芦
             trip_rank = [r for r, c in rank_counts.items() if c == 3][0]
             pair_rank = [r for r, c in rank_counts.items() if c == 2][0]
-            return (HandRank.FULL_HOUSE + trip_rank * 100, [trip_rank, pair_rank])
+            return (HandRank.FULL_HOUSE + trip_rank * 100 + pair_rank,
+                    [trip_rank, pair_rank])
 
         if is_flush:
             # 同花
-            return (HandRank.FLUSH + HandEvaluator._flush_score(ranks), ranks)
+            return (HandRank.FLUSH + HandEvaluator._tiebreak(ranks), ranks)
 
         if is_straight:
             # 顺子
@@ -111,23 +137,25 @@ class HandEvaluator:
             # 三条
             trip_rank = [r for r, c in rank_counts.items() if c == 3][0]
             kickers = sorted([r for r in ranks if r != trip_rank], reverse=True)
-            return (HandRank.THREE_OF_A_KIND + trip_rank * 100, [trip_rank] + kickers)
+            return (HandRank.THREE_OF_A_KIND + HandEvaluator._tiebreak([trip_rank] + kickers),
+                    [trip_rank] + kickers)
 
         pairs = sorted([r for r, c in rank_counts.items() if c == 2], reverse=True)
         if len(pairs) == 2:
             # 两对
             kicker = [r for r in ranks if r not in pairs][0]
-            return (HandRank.TWO_PAIR + pairs[0] * 100 + pairs[1],
+            return (HandRank.TWO_PAIR + HandEvaluator._tiebreak([pairs[0], pairs[1], kicker]),
                     [pairs[0], pairs[1], kicker])
 
         if len(pairs) == 1:
             # 一对
             pair_rank = pairs[0]
             kickers = sorted([r for r in ranks if r != pair_rank], reverse=True)
-            return (HandRank.ONE_PAIR + pair_rank * 100, [pair_rank] + kickers)
+            return (HandRank.ONE_PAIR + HandEvaluator._tiebreak([pair_rank] + kickers),
+                    [pair_rank] + kickers)
 
         # 高牌
-        return (HandRank.HIGH_CARD + HandEvaluator._high_card_score(ranks), ranks)
+        return (HandRank.HIGH_CARD + HandEvaluator._tiebreak(ranks), ranks)
 
     @staticmethod
     def evaluate_best_hand(hole_cards: List[Card], community_cards: List[Card]) -> Tuple[int, List[Card]]:

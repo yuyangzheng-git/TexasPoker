@@ -8,3 +8,7 @@ dist/
 .DS_Store
 venv/
 logs/
+
+# Generated experiment artifacts (regenerate via scripts/benchmark.py)
+data/benchmark_results.csv
+data/preflop_equity_table.json

@@ -20,7 +20,12 @@ from database.connection import init_db
 from auth import router as auth_router
 from admin import router as admin_router
 
-load_dotenv("../config/.env")
+# 配置与日志目录（基于本文件位置，与运行目录无关）
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_DIR = BASE_DIR.parent / "config"
+LOG_DIR = BASE_DIR.parent / "logs"
+
+load_dotenv(CONFIG_DIR / ".env")
 
 app = FastAPI(title="Poker LLM Agent API")
 
@@ -184,10 +189,10 @@ async def create_game(body: dict):
     api_key = os.getenv("DEEPSEEK_API_KEY", "")
 
     # 加载 Agent 人格配置
-    with open("../config/agent_personas.json") as f:
+    with open(CONFIG_DIR / "agent_personas.json", encoding="utf-8") as f:
         all_personas = json.load(f)["agents"]
 
-    with open("../config/game_config.json") as f:
+    with open(CONFIG_DIR / "game_config.json", encoding="utf-8") as f:
         game_cfg = json.load(f)
 
     # 创建玩家列表
@@ -294,8 +299,6 @@ async def create_game(body: dict):
 
 
 # ─── 日志 API ─────────────────────────────────────────────────────────
-
-LOG_DIR = Path("../logs")
 
 
 @app.get("/api/logs")

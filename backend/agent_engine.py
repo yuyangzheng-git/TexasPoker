@@ -5,6 +5,7 @@ LLM Agent 引擎
 import re
 import json
 import asyncio
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Optional, Callable
 
@@ -12,8 +13,9 @@ from game_engine import GameEngine, Player, Action, ActionType
 from monte_carlo_equity import MonteCarloEquityCalculator
 
 
-# 加载全局配置
-with open("../config/game_config.json") as _f:
+# 加载全局配置（基于本文件位置，与运行目录无关）
+_CONFIG_DIR = Path(__file__).resolve().parent.parent / "config"
+with open(_CONFIG_DIR / "game_config.json", encoding="utf-8") as _f:
     _game_cfg = json.load(_f)
 MC_SIMULATIONS = _game_cfg.get("monte_carlo", {}).get("simulations", 5000)
 
@@ -37,7 +39,12 @@ class OpponentProfile:
         self.hands_observed += 1
         if action_type in ["call", "raise", "allin"]:
             self.vpip = (self.vpip * (self.hands_observed - 1) + 1) / self.hands_observed
-        if action_type == "raise":
+        # PFR counts raises that increase the bet, including an all-in that
+        # raises (context supplies the amount above the call price).
+        is_raise = action_type == "raise" or (
+            action_type == "allin" and context.get("raise_amount", 0) > 0
+        )
+        if is_raise:
             self.pfr = (self.pfr * (self.hands_observed - 1) + 1) / self.hands_observed
         if action_type == "fold" and context.get("facing_bet"):
             self.fold_to_bet = (self.fold_to_bet * (self.hands_observed - 1) + 1) / self.hands_observed
@@ -85,6 +92,8 @@ class ParsedResponse:
     thinking: str = ""
     action: Optional[Action] = None
     speech: str = ""
+    fallback_reason: str = ""  # 非空表示 LLM 调用失败后的降级决策
+    usage: Optional[dict] = None  # LLM token 用量（可用时记录）
 
 
 # ──────────────────────────────────────────

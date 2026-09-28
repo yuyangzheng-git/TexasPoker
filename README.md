@@ -1,4 +1,16 @@
-# 德州扑克 LLM 多智能体游戏
+# 德州扑克 LLM 多智能体游戏 | Texas Hold'em LLM Multi-Agent Game
+
+## English Overview
+
+This project is a Texas Hold'em simulation platform with LLM-based agents, Monte Carlo equity estimation, and real-time decision visualization. I built it as a testbed for studying AI decision-making under uncertainty and comparing language-model reasoning with algorithmic baselines.
+
+**Highlights**
+
+- Headless game engine with full betting rules, side pots, and C(7,5) hand evaluation
+- LLM agents with personas, memory, and opponent profiling (`backend/llm_agent.py`, `backend/agent_engine.py`)
+- Monte Carlo equity calculator and pot-odds engine for mathematical baselines
+- Reproducible benchmark harness: `scripts/benchmark.py` (no API keys needed for MC/random seats)
+- Preliminary results: [docs/benchmark-results.md](docs/benchmark-results.md) | research framing: [research.md](research.md)
 
 ## 项目概述
 
@@ -159,18 +171,98 @@ npm start
 
 ## 项目状态
 
-**阶段**：PRD 详细设计完成，准备代码开发
+**阶段**：核心系统已完成，可用作研究测试平台。
 
-**下一步**：
-- [ ] Phase 1：游戏引擎开发
-- [ ] Phase 2：LLM Agent 接入
-- [ ] Phase 3：MC 股似率优化
-- [ ] Phase 4：记忆系统
-- [ ] Phase 5：完整集成测试
+- ✅ 游戏引擎（下注轮、边池、赢家判定）
+- ✅ 手牌评估（C(7,5) 枚举）
+- ✅ Monte Carlo 胜率计算
+- ✅ LLM Agent（人格、记忆、对手画像、降级容错）
+- ✅ WebSocket 实时对局 + React 前端
+- ✅ 无头基准测试脚本（`scripts/benchmark.py`）
+- 🔬 进行中：LLM vs 算法基线的大规模基准对比（见 [research.md](research.md)）
 
-## 贡献指南
+## Architecture | 系统架构
 
-详见项目内文档
+```
+┌──────────────┐  WebSocket/REST  ┌───────────────────────────────┐
+│  frontend/   │ ◄──────────────► │          backend/            │
+│  React +     │                  │  main.py (FastAPI + WS)      │
+│  Redux       │                  │    ├── game_engine.py        │  发牌/下注/边池/赢家
+│              │                  │    ├── hand_evaluator.py     │  C(7,5) 手牌评估
+└──────────────┘                  │    ├── monte_carlo_equity.py │  MC 胜率估算
+                                  │    ├── llm_agent.py          │  LLM 决策 + 解析降级
+                                  │    ├── agent_engine.py       │  记忆/对手画像/底池赔率
+                                  │    └── deepseek_client.py    │  DeepSeek API
+                                  └───────────────┬───────────────┘
+                                                  │
+                                  ┌───────────────▼───────────────┐
+                                  │  config/  agent_personas.json │
+                                  │           game_config.json    │
+                                  └───────────────────────────────┘
+```
+
+## Benchmark | 基准测试
+
+无需 API Key 即可对比 MC 基线 vs 随机对照：
+
+```bash
+# 100 手牌 × 3 随机种子，3 个 MC 基线席位 vs 3 个随机对照席位
+# 庄家每手轮转自然平衡位置；--rotate 按种子轮换初始座位排布；
+# --require-position-coverage 校验每种策略覆盖全部 6 个位置
+python3 scripts/benchmark.py --hands 100 --sims 500 --seeds 42,43,44 \
+    --rotate --require-position-coverage --rebuy --csv data/benchmark_results.csv
+
+# 加入 LLM 席位（需要 ANTHROPIC_API_KEY 与 openai 包）
+# 初始化失败默认终止实验；--llm-fallback 显式降级为 MC 基线（CSV 会标记 mc_fallback）
+python3 scripts/benchmark.py --hands 100 --seeds 42,43,44 \
+    --seats llm,llm,llm,mc,mc,mc --csv data/benchmark_llm_results.csv
+```
+
+结果与分析见 [docs/benchmark-results.md](docs/benchmark-results.md)。
+当前结果仅对比两个算法基线，属于初步验证（非 LLM 决策质量结论）。
+
+## Tests | 测试
+
+```bash
+./run_tests.sh        # 全部测试（手牌评估、边池、蒙特卡洛牌组、根目录导入、基准统计轨迹）
+```
+
+## My Contribution
+
+Solo project (Yu Yang Zheng). What I designed and implemented:
+
+- The game engine: betting-round control, side-pot calculation, winner determination
+- C(7,5) hand evaluation and the Monte Carlo equity calculator
+- The LLM agent stack: dynamic prompt building, response parsing with rule validation
+  and fallback actions, memory compression, and opponent profiling (VPIP/PFR tracking)
+- The WebSocket game server and the React table UI with agent-thinking visualization
+- The headless benchmark harness (`scripts/benchmark.py`) with multi-seed runs,
+  per-seed initial-alignment rotation, position recording, and per-decision
+  fallback/token logging
+
+What I fixed and verified in this repository (with automated checks):
+
+- Hand-evaluator scoring: fixed cross-category overlap (e.g., four aces used to
+  outrank a straight flush); 39 tests pass, including 7 cross-category/kicker cases
+- Monte Carlo deck: known cards are now excluded from the simulation deck
+  (`build_remaining_deck`; 47 cards with 5 known — regression-tested)
+- Config paths are CWD-independent (`__file__`-based) across the import chain;
+  tests import `agent_engine`/`llm_agent`/`main` from the repo root
+- Position balancing: the old per-hand `--rotate` cancelled the dealer rotation
+  and pinned each agent to one relative position (e.g. always CO). The run now
+  records `position` and `dealer` per hand, verifies each strategy covers all
+  six positions (`--require-position-coverage`), and rotates only the initial
+  alignment per seed
+- PFR counts pre-flop all-in raises (stack above the call price) but not
+  all-in calls — tested through real engine hands
+- The cross-seed summary shows per-seed values with a 95% t-confidence interval
+  (NIST 1.3.5.2) instead of a normal-approximation CI
+- Benchmark rigor: LLM seats bind the engine's real `Player` (state-sync tested),
+  init failure aborts the run by default, and the CSV records the actual agent,
+  fallback reasons (including init failures), and token usage
+- Current `docs/benchmark-results.md` numbers are algorithmic-baseline sanity
+  checks only (MC vs random; the 3-seed 95% t-CI includes zero); LLM
+  comparisons are pending real API runs
 
 ## 许可证
 

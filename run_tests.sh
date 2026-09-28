@@ -1,5 +1,6 @@
 #!/bin/bash
 # 运行所有后端测试
+# 用法: ./run_tests.sh   （在仓库根目录执行）
 
 set -e
 
@@ -18,12 +19,8 @@ pip install pytest -q
 
 cd ../tests
 echo ""
-echo "${GREEN}Test: Hand Evaluator${NC}"
-python3 -m pytest test_hand_evaluator.py -v
-
-echo ""
-echo "${GREEN}Test: Side Pots${NC}"
-python3 -m pytest test_side_pot.py -v
+echo "${GREEN}All test files:${NC}"
+python3 -m pytest -v
 
 echo ""
 echo "${GREEN}All tests completed!${NC}"

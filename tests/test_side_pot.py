@@ -21,20 +21,22 @@ class TestSidePots:
         game = make_game()
         game.deal_hole_cards()
         game.post_blinds()
-        # 所有人下注相同
+        # 所有人下注相同（引擎按 total_bets 跟踪整局下注）
         for p in game.players:
-            p.current_bet = 100.0
+            game.total_bets[p.id] = 100.0
+        game.pot = 300.0
         pots = game.calculate_side_pots()
         assert len(pots) == 1
+        assert pots[0].amount == 300.0
 
     def test_allin_creates_side_pot(self):
         """Carol all-in 200，应该产生主池和边池"""
         game = make_game()
         game.deal_hole_cards()
         # 手动模拟下注
-        game.players[0].current_bet = 500.0
-        game.players[1].current_bet = 500.0
-        game.players[2].current_bet = 200.0
+        game.total_bets["p1"] = 500.0
+        game.total_bets["p2"] = 500.0
+        game.total_bets["p3"] = 200.0
         game.players[2].status = PlayerStatus.ALLIN
         game.pot = 1200.0
 

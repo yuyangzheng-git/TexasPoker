@@ -11,6 +11,25 @@ class MonteCarloEquityCalculator:
     """Monte Carlo 方法计算股似率"""
 
     @staticmethod
+    def build_remaining_deck(known_cards: List[Card]) -> List[Card]:
+        """构建除去已知牌后的剩余牌堆
+
+        Card 实现了基于 (rank, suit) 的 __eq__/__hash__，
+        保证已知牌（手牌 + 公共牌）不会再次出现在剩余牌堆中。
+        """
+        known = set(known_cards)
+        remaining = [
+            Card(rank, suit)
+            for rank in range(2, 15)
+            for suit in range(4)
+            if Card(rank, suit) not in known
+        ]
+        assert len(remaining) == 52 - len(known), (
+            f"剩余牌堆数量错误: {len(remaining)} != {52 - len(known)}"
+        )
+        return remaining
+
+    @staticmethod
     def calculate_equity(
         my_hole_cards: List[Card],
         community_cards: List[Card],
@@ -29,13 +48,9 @@ class MonteCarloEquityCalculator:
         Returns:
             float: 胜率 (0.0 - 1.0)
         """
-        known_cards = set(my_hole_cards + community_cards)
-        remaining_deck = [
-            Card(rank, suit)
-            for rank in range(2, 15)
-            for suit in range(4)
-            if Card(rank, suit) not in known_cards
-        ]
+        remaining_deck = MonteCarloEquityCalculator.build_remaining_deck(
+            my_hole_cards + community_cards
+        )
 
         my_wins = 0.0
 
