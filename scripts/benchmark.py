@@ -5,6 +5,10 @@ and export per-hand results to CSV.
 Agent types:
   mc     - rule-based baseline: Monte Carlo equity + pot odds (no API keys needed)
   random - control baseline: uniform random over legal actions
+  strategy[:persona_id]
+         - local styled mixed-strategy agent (backend/strategy_agent.py) with
+           range-aware equity; optional persona id from config/agent_personas.json
+           (e.g. strategy:laohu). No API keys needed.
   llm    - LLM agent (backend/llm_agent.py); requires ANTHROPIC_API_KEY and the
            `openai` package. If LLM initialization fails the run aborts by
            default; pass --llm-fallback to degrade those seats to the MC
@@ -50,6 +54,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from game_engine import GameEngine, Player, Action, ActionType, GamePhase, PlayerStatus  # noqa: E402
 from monte_carlo_equity import MonteCarloEquityCalculator  # noqa: E402
+from opponent_model import PublicStatsTracker  # noqa: E402
 
 
 @dataclass
@@ -146,6 +151,40 @@ class RandomAgent(BaseAgent):
         return Decision(Action(player.id, action_type), actual_agent=self.agent_type)
 
 
+class StrategyWrapperAgent(BaseAgent):
+    """Wraps backend StrategyAgent (styled mixed strategy, range-aware equity)."""
+
+    agent_type = "strategy"
+
+    def __init__(self, player_id: str, sims: int = 500, persona_id: str = "", label: str = "strategy"):
+        super().__init__(player_id, sims)
+        from strategy_agent import StrategyAgent
+
+        with open(CONFIG_DIR / "agent_personas.json", encoding="utf-8") as f:
+            personas = {p["id"]: p for p in json.load(f)["agents"]}
+        if persona_id and persona_id not in personas:
+            raise ValueError(f"unknown persona id: {persona_id}")
+        self.persona = personas.get(persona_id) or {
+            "id": "default", "name": "策略AI", "vpip_target": [0.25, 0.29],
+            "pfr_target": [0.19, 0.23], "risk_profile": "tight_aggressive",
+            "difficulty_level": "hard", "temperature": 0.5,
+        }
+        self.agent_type = label
+        self.StrategyAgentClass = StrategyAgent
+        self.agent = None
+        self.tracker = None
+
+    async def decide(self, game: GameEngine, player: Player) -> Decision:
+        if self.agent is None:
+            self.agent = self.StrategyAgentClass(self.persona, player,
+                                                 seed=random.randrange(2**31), simulations=self.sims)
+            self.agent.attach_tracker(self.tracker)
+        self.agent.player = player
+        resp = self.agent.decide_sync(game)
+        return Decision(action=resp.action, fallback_reason=resp.fallback_reason,
+                        actual_agent=self.agent_type)
+
+
 class LLMWrapperAgent(BaseAgent):
     """Wraps backend LLMAgent.
 
@@ -218,7 +257,8 @@ class LLMWrapperAgent(BaseAgent):
         )
 
 
-async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent]) -> dict:
+async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent],
+                    tracker: Optional[PublicStatsTracker] = None) -> dict:
     """Play one full hand; returns per-player results."""
     engine.reset_for_new_hand()
     if len(engine.active_players()) < 2:
@@ -226,6 +266,8 @@ async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent]) -> dict:
 
     engine.deal_hole_cards()
     engine.post_blinds()
+    if tracker is not None:
+        tracker.start_hand(engine)
 
     per_player = {
         p.id: {
@@ -316,6 +358,8 @@ async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent]) -> dict:
             record["actions"][action.type.value] += 1
             engine.process_action(action)
 
+            if tracker is not None:
+                tracker.observe(engine, player.id, action.type)
             if len(engine.non_folded_players()) <= 1:
                 break
 
@@ -334,6 +378,8 @@ async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent]) -> dict:
         engine.advance_phase()
 
     allocations = engine.determine_winners()
+    if tracker is not None:
+        tracker.end_hand(engine)
     for alloc in allocations:
         pid = alloc["playerId"]
         if pid in per_player:
@@ -362,6 +408,9 @@ def make_seats(seat_spec: list, sims: int, allow_llm_fallback: bool) -> Dict[str
             seats[player_id] = MCBaselineAgent(player_id, sims)
         elif spec == "random":
             seats[player_id] = RandomAgent(player_id, sims)
+        elif spec == "strategy" or spec.startswith("strategy:"):
+            persona_id = spec.split(":", 1)[1] if ":" in spec else ""
+            seats[player_id] = StrategyWrapperAgent(player_id, sims, persona_id=persona_id, label=spec)
         elif spec == "llm":
             seats[player_id] = LLMWrapperAgent(player_id, sims, persona_index=i,
                                                allow_fallback=allow_llm_fallback)
@@ -406,6 +455,10 @@ def run_seed(seed: int, seed_index: int, args, seat_spec: list) -> List[dict]:
         for i, pid in enumerate(agents)
     ]
     engine = GameEngine(players, min_bet=args.stack / 200)  # SB = 0.5% of stack
+    tracker = PublicStatsTracker()
+    for agent in agents.values():
+        if hasattr(agent, "tracker"):
+            agent.tracker = tracker
 
     print(f"seed={seed}: {args.hands} hands, seats={seat_spec}, sims={args.sims}, "
           f"rotate={args.rotate}, rebuy={args.rebuy}")
@@ -419,7 +472,7 @@ def run_seed(seed: int, seed_index: int, args, seat_spec: list) -> List[dict]:
             print(f"  hand {hand + 1}: skipped (game over)")
             break
         seats = agents
-        result = asyncio.run(play_hand(engine, seats))
+        result = asyncio.run(play_hand(engine, seats, tracker))
         for pid, rec in result.items():
             rows.append({
                 "seed": seed,
