@@ -2,11 +2,14 @@ import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 import { GameState, AgentThinkingState, ChatMessage, UIState, GamePhase } from "../types/game";
 
 interface PlayerActionRequest {
+  requestId?: string;
   isHumanTurn: boolean;
   callAmount: number;
   pot: number;
   validActions: string[];
   timeLimit: number;
+  minRaise: number;
+  maxRaise: number;
 }
 
 interface GameStoreState {
@@ -15,6 +18,10 @@ interface GameStoreState {
   chatHistory: ChatMessage[];
   uiState: UIState;
   connected: boolean;
+  connectionError?: string;
+  gameFinished: boolean;
+  actionSubmitting: boolean;
+  actionError?: string;
   playerActionRequest: PlayerActionRequest;
   gameResult?: { allocations: any[]; finalState?: any };
   currentActingPlayerId?: string;
@@ -27,16 +34,20 @@ const initialState: GameStoreState = {
   agentThinking: {},
   chatHistory: [],
   uiState: {
-    expandedAgents: new Set(),
+    expandedAgents: [],
     showChatHistory: true,
   },
   connected: false,
+  gameFinished: false,
+  actionSubmitting: false,
   playerActionRequest: {
     isHumanTurn: false,
     callAmount: 0,
     pot: 0,
     validActions: [],
     timeLimit: 30000,
+    minRaise: 20,
+    maxRaise: 1000,
   },
   gameResult: undefined,
   currentActingPlayerId: undefined,
@@ -78,7 +89,7 @@ const gameSlice = createSlice({
           isStreaming: true,
         };
       }
-      state.agentThinking[agentId].thinking += chunk;
+      state.agentThinking[agentId].thinking += `${state.agentThinking[agentId].thinking ? "\n\n" : ""}${chunk}`;
     },
     completeAgentThinking: (
       state,
@@ -98,20 +109,36 @@ const gameSlice = createSlice({
     },
     toggleExpandAgent: (state, action: PayloadAction<string>) => {
       const agentId = action.payload;
-      if (state.uiState.expandedAgents.has(agentId)) {
-        state.uiState.expandedAgents.delete(agentId);
-      } else {
-        state.uiState.expandedAgents.add(agentId);
-      }
+      const index = state.uiState.expandedAgents.indexOf(agentId);
+      if (index >= 0) state.uiState.expandedAgents.splice(index, 1);
+      else state.uiState.expandedAgents.push(agentId);
+    },
+    setActionSubmitting: (state, action: PayloadAction<boolean>) => {
+      state.actionSubmitting = action.payload;
+      if (action.payload) state.actionError = undefined;
+    },
+    setActionError: (state, action: PayloadAction<string>) => {
+      state.actionError = action.payload;
+      state.actionSubmitting = false;
+    },
+    setConnectionError: (state, action: PayloadAction<string | undefined>) => {
+      state.connectionError = action.payload;
+    },
+    setGameFinished: (state, action: PayloadAction<boolean>) => {
+      state.gameFinished = action.payload;
     },
     setConnected: (state, action: PayloadAction<boolean>) => {
       state.connected = action.payload;
     },
     setPlayerActionRequest: (state, action: PayloadAction<PlayerActionRequest>) => {
       state.playerActionRequest = action.payload;
+      state.actionSubmitting = false;
+      state.actionError = undefined;
     },
     clearPlayerActionRequest: (state) => {
       state.playerActionRequest = { ...initialState.playerActionRequest };
+      state.actionSubmitting = false;
+      state.actionError = undefined;
     },
     setGameResult: (state, action: PayloadAction<{ allocations: any[]; finalState?: any }>) => {
       state.gameResult = action.payload;
@@ -127,11 +154,14 @@ const gameSlice = createSlice({
       state.agentThinking = {};
       state.chatHistory = [];
       state.uiState = {
-        expandedAgents: new Set(),
+        expandedAgents: [],
         showChatHistory: true,
       };
       state.playerActionRequest = { ...initialState.playerActionRequest };
+      state.actionSubmitting = false;
+      state.actionError = undefined;
       state.gameResult = undefined;
+      state.gameFinished = false;
       state.currentActingPlayerId = undefined;
       state.revealedCards = undefined;
     },
@@ -159,6 +189,10 @@ export const {
   addChatMessage,
   toggleExpandAgent,
   setConnected,
+  setConnectionError,
+  setActionSubmitting,
+  setActionError,
+  setGameFinished,
   setPlayerActionRequest,
   clearPlayerActionRequest,
   setGameResult,

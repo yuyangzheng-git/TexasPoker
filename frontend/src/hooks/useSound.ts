@@ -31,6 +31,7 @@ export const useSound = () => {
 
   const playSound = useCallback(
     (soundType: SoundType) => {
+      if (localStorage.getItem('poker_sound') !== 'true') return;
       try {
         const ctx = getAudioContext();
         const config = SOUND_CONFIGS[soundType];
@@ -44,7 +45,7 @@ export const useSound = () => {
         oscillator.type = config.type;
         oscillator.frequency.value = config.frequency;
 
-        gainNode.gain.setValueAtTime(config.volume, ctx.currentTime);
+        gainNode.gain.setValueAtTime(config.volume * 0.25, ctx.currentTime);
         gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + config.duration);
 
         oscillator.start(ctx.currentTime);

@@ -22,8 +22,8 @@ import {
   PlayerStats,
 } from '../types/auth';
 
-// API base URL
-const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+import { API_BASE_URL } from '../config';
+const API_BASE = API_BASE_URL;
 
 // Token storage
 const TOKEN_KEY = 'poker_auth_token';
@@ -90,6 +90,7 @@ export interface CreateGameRequest {
 export interface CreateGameResponse {
   gameId: string;
   wsUrl: string;
+  sessionToken: string;
   players: Array<{ id: string; name: string; stack: number }>;
 }
 
@@ -106,7 +107,9 @@ export const gameApi = {
       throw new Error((error as any).detail || "Failed to create game");
     }
 
-    return response.json();
+    const result: CreateGameResponse = await response.json();
+    sessionStorage.setItem(`poker_session_${result.gameId}`, result.sessionToken);
+    return result;
   },
 };
 
@@ -447,4 +450,5 @@ export const adminApi = {
   },
 };
 
-export default { gameApi, authApi, adminApi };
+const api = { gameApi, authApi, adminApi };
+export default api;

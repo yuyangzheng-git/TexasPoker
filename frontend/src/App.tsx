@@ -15,7 +15,7 @@ import UsersPage from "./pages/admin/UsersPage";
 import GamesPage from "./pages/admin/GamesPage";
 import AIAgentsPage from "./pages/admin/AIAgentsPage";
 import SettingsPage from "./pages/admin/SettingsPage";
-import { MobileFullscreen } from "./components/MobileFullscreen";
+import { ClubProvider } from "./components/club/Club";
 import "./index.css";
 
 // Auth initializer component
@@ -77,7 +77,7 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 const AppRoutes: React.FC = () => {
   return (
     <AuthInitializer>
-      <MobileFullscreen>
+      <ClubProvider>
         <BrowserRouter>
           <Routes>
             {/* Public routes */}
@@ -116,7 +116,7 @@ const AppRoutes: React.FC = () => {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
         </BrowserRouter>
-      </MobileFullscreen>
+      </ClubProvider>
     </AuthInitializer>
   );
 };

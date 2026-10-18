@@ -1,0 +1,43 @@
+name: texaspoker
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      APP_ENV: production
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Run python3 deploy/init_env.py first}
+      POKER_AGENT_MODE: ${POKER_AGENT_MODE:-strategy}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      SQLITE_DATABASE_URL: sqlite:////app/data/poker.db
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_BASE_URL: ${ANTHROPIC_BASE_URL:-https://cn.api.openai-next.com/}
+    volumes:
+      - poker_data:/app/data
+      - poker_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  web:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.web
+    restart: unless-stopped
+    ports:
+      - "${BIND_ADDRESS:-0.0.0.0}:${HTTP_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+        restart: true
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+volumes:
+  poker_data:
+  poker_logs:

@@ -3,6 +3,7 @@
 管理游戏流程、发牌、下注轮、底池和胜负判定
 """
 import random
+import math
 from enum import Enum
 from typing import List, Optional
 from dataclasses import dataclass, field
@@ -39,6 +40,8 @@ class Action:
     amount: float = 0.0
     phase: str    = ""
     speech: str   = ""
+    street_bet_before: Optional[float] = None
+    player_bet_before: Optional[float] = None
 
 
 @dataclass
@@ -81,6 +84,12 @@ class GameEngine:
         self.hand_start_stacks: dict = {p.id: p.stack for p in players}
         # 跟踪整局中每个玩家的总下注额（用于边池计算）
         self.total_bets: dict = {p.id: 0.0 for p in players}
+        self.last_full_raise = self.big_blind
+        self.acted_bets: dict = {}
+        self.last_actor_idx = None
+        self.hand_player_ids = {p.id for p in players if p.stack > 0}
+        self.betting_started = False
+        self._allocations = None
 
     def get_recent_speech(self, max_lines: int = 5) -> str:
         """返回最近 max_lines 句对话"""
@@ -133,22 +142,43 @@ class GameEngine:
     # ──────────────────────────────────────────
     def post_blinds(self):
         """强制下注小/大盲注"""
+        if self.betting_started:
+            raise ValueError("Blinds have already been posted")
+        self.hand_player_ids = {p.id for p in self.players if p.stack > 0}
+        if self.players[self.dealer_idx].id not in self.hand_player_ids:
+            self.dealer_idx = self._next_live_seat(self.dealer_idx)
         self.assign_positions()
-        active = self.active_players()
+        active = self._hand_seats()
         if len(active) < 2:
             return
-        sb_idx = (self.dealer_idx + 1) % len(active)
-        bb_idx = (self.dealer_idx + 2) % len(active)
+        button = next(i for i, p in enumerate(active) if p.id == self.players[self.dealer_idx].id)
+        sb_idx = button if len(active) == 2 else (button + 1) % len(active)
+        bb_idx = (sb_idx + 1) % len(active)
 
         self._place_blind(active[sb_idx], self.min_bet)       # 小盲注
         self._place_blind(active[bb_idx], self.big_blind)     # 大盲注
         self.street_bet = self.big_blind
         # Pre-flop: 初始化待行动玩家集合（仅 ACTIVE）
         self.pending_actors = {p.id for p in self.players if p.status == PlayerStatus.ACTIVE}
+        self.betting_started = True
+        self._skip_uncontested_action()
+
+    def _hand_seats(self):
+        return [p for p in self.players if p.id in self.hand_player_ids]
+
+    def _next_live_seat(self, start):
+        for step in range(1, len(self.players) + 1):
+            idx = (start + step) % len(self.players)
+            if self.players[idx].stack > 0:
+                return idx
+        return start
 
     def assign_positions(self):
         """根据庄家位置为所有玩家分配位置标签"""
-        n = len(self.players)
+        seats = self._hand_seats()
+        n = len(seats)
+        if not n:
+            return
         # 顺时针从庄家开始的位置标签
         position_labels = {
             2: ["BTN/SB", "BB"],
@@ -167,8 +197,11 @@ class GameEngine:
             base = ["BTN", "SB", "BB", "UTG", "EP", "MP", "LJ", "HJ", "CO"]
             labels = base + [f"P{i}" for i in range(9, n)]
 
-        for i, player in enumerate(self.players):
-            offset = (i - self.dealer_idx) % n
+        button = seats.index(self.players[self.dealer_idx])
+        for p in self.players:
+            p.position = ""
+        for i, player in enumerate(seats):
+            offset = (i - button) % n
             player.position = labels[offset]
 
     def _place_blind(self, player: Player, amount: float):
@@ -188,90 +221,100 @@ class GameEngine:
         player = self._get_player(action.player_id)
         if player is None or player.status != PlayerStatus.ACTIVE:
             return False
+        if self.phase in (GamePhase.SHOWDOWN, GamePhase.ENDED) or self._allocations is not None:
+            return False
+        if self.betting_started:
+            order = self.get_action_order()
+            if not order or order[0].id != player.id:
+                return False
+        if action.type not in self.get_valid_actions(player):
+            return False
+        if isinstance(action.amount, bool) or not isinstance(action.amount, (int, float)):
+            return False
+        try:
+            if not math.isfinite(action.amount) or action.amount < 0:
+                return False
+        except OverflowError:
+            return False
 
+        old_bet = self.street_bet
+        target = player.current_bet
+        if action.type == ActionType.CALL:
+            target += min(max(0, self.street_bet - player.current_bet), player.stack)
+        elif action.type == ActionType.RAISE:
+            target = action.amount
+            if target < self.minimum_raise_to() or target > player.current_bet + player.stack:
+                return False
+        elif action.type == ActionType.ALLIN:
+            target += player.stack
+
+        # Validate first: rejected actions never mutate stacks, history or turn order.
         action.phase = self.phase.value
-        self.action_history.append(action)
-        self.last_action_phase = self.phase.value  # 标记本轮已有行动
-        old_sb = self.street_bet  # 记录当前街下注额，用于判断是否需要重新行动
-
+        action.street_bet_before = old_bet
+        action.player_bet_before = player.current_bet
+        if action.type == ActionType.ALLIN:
+            # History records the actual raise-to total, independent of client input.
+            action.amount = target
         if action.type == ActionType.FOLD:
             player.status = PlayerStatus.FOLDED
-
-        elif action.type == ActionType.CHECK:
-            if player.current_bet != self.street_bet:
-                # 非法 check，强制改为 call
-                action.type = ActionType.CALL
-                return self.process_action(action)
-
-        elif action.type == ActionType.CALL:
-            diff = self.street_bet - player.current_bet
-            actual = min(diff, player.stack)
-            player.stack -= actual
-            player.current_bet += actual
-            self.pot += actual
-            self.total_bets[player.id] += actual  # 记录总下注
+        else:
+            contribution = target - player.current_bet
+            player.stack -= contribution
+            player.current_bet = target
+            self.total_bets[player.id] += contribution
+            self.pot += contribution
             if player.stack == 0:
                 player.status = PlayerStatus.ALLIN
+            self.street_bet = max(self.street_bet, target)
 
-        elif action.type == ActionType.RAISE:
-            min_raise = max(self.street_bet * 2, self.big_blind)
-            amount = max(action.amount, min_raise)
-            amount = min(amount, player.stack + player.current_bet)
-
-            diff = amount - player.current_bet
-            player.stack -= diff
-            player.current_bet = amount
-            self.street_bet = amount
-            self.pot += diff
-            self.total_bets[player.id] += diff  # 记录总下注
-            if player.stack == 0:
-                player.status = PlayerStatus.ALLIN
-
-        elif action.type == ActionType.ALLIN:
-            diff = player.stack
-            player.current_bet += diff
-            self.pot += diff
-            self.total_bets[player.id] += diff  # 记录总下注
-            if player.current_bet > self.street_bet:
-                self.street_bet = player.current_bet
-            player.stack = 0
-            player.status = PlayerStatus.ALLIN
-
-        # 更新行动追踪
-        # 从待行动集合中移除当前玩家
+        increase = self.street_bet - old_bet
+        if increase >= self.last_full_raise:
+            self.last_full_raise = increase
+        self.acted_bets[player.id] = self.street_bet
+        self.last_actor_idx = self.players.index(player)
         self.pending_actors.discard(player.id)
-        # raise/allin 增加了下注额 → 其他所有活跃玩家需要重新行动
-        if action.type in (ActionType.RAISE, ActionType.ALLIN) and self.street_bet > old_sb:
-            for p in self.players:
-                if p.status == PlayerStatus.ACTIVE and p.id != player.id:
-                    self.pending_actors.add(p.id)
-
+        if increase > 0:
+            self.pending_actors.update(
+                p.id for p in self.active_players() if p.current_bet < self.street_bet
+            )
+        self.action_history.append(action)
+        self.last_action_phase = self.phase.value
+        self._skip_uncontested_action()
         return True
 
+    def minimum_raise_to(self) -> float:
+        return self.street_bet + self.last_full_raise
+
+    def can_raise(self, player: Player) -> bool:
+        # A short all-in requires a call, but only a full cumulative raise reopens betting.
+        faced = self.acted_bets.get(player.id)
+        return faced is None or self.street_bet - faced >= self.last_full_raise
+
+    def _skip_uncontested_action(self):
+        active = self.active_players()
+        if len(self.non_folded_players()) <= 1:
+            self.pending_actors.clear()
+        elif len(active) == 1:
+            opposing_bet = max((p.current_bet for p in self.non_folded_players() if p.id != active[0].id), default=0)
+            if active[0].current_bet >= min(self.street_bet, opposing_bet):
+                self.pending_actors.clear()
+
     def is_betting_round_complete(self) -> bool:
-        """检查当前下注轮是否结束"""
-        if self.last_action_phase != self.phase.value:
-            return False
-        active = [p for p in self.players
-                  if p.status == PlayerStatus.ACTIVE]
-        if len(active) == 0:
-            return True
-        # 所有 active 玩家下注相同
-        if not all(p.current_bet == self.street_bet for p in active):
-            return False
-        # 所有玩家都已行动
-        return len(self.pending_actors) == 0
+        return not self.pending_actors
 
     def advance_phase(self):
         """进入下一阶段"""
         # 重置每轮下注状态
         for p in self.players:
-            if p.status == PlayerStatus.ACTIVE:
-                p.current_bet = 0.0
+            p.current_bet = 0.0
+        self.last_full_raise = self.big_blind
+        self.acted_bets = {}
+        self.last_actor_idx = None
         self.street_bet = 0.0
         self.last_action_phase = ""  # 重置行动跟踪
         # 新阶段开始时，所有活跃(ACTIVE)玩家都需行动
         self.pending_actors = {p.id for p in self.players if p.status == PlayerStatus.ACTIVE}
+        self._skip_uncontested_action()
 
         phase_order = [
             GamePhase.PRE_FLOP, GamePhase.FLOP,
@@ -287,26 +330,23 @@ class GameEngine:
 
     def get_action_order(self) -> List[Player]:
         """返回当前下注轮正确的玩家行动顺序（基于庄家位置和阶段）"""
-        active = self.active_players()
-        if len(active) <= 1:
-            return active
-
-        n = len(self.players)
-
-        if self.phase == GamePhase.PRE_FLOP and len(active) > 2:
-            # 翻牌前 3+ 人：UTG（大盲注左边）先行动
-            # BB = dealer + 2, UTG = BB + 1 = dealer + 3
-            start = (self.dealer_idx + 3) % n
+        seats = self._hand_seats()
+        if not seats or not self.pending_actors:
+            return []
+        if self.last_actor_idx is not None:
+            start = (self.last_actor_idx + 1) % len(self.players)
+        elif self.phase == GamePhase.PRE_FLOP:
+            button = seats.index(self.players[self.dealer_idx])
+            first = seats[button] if len(seats) == 2 else seats[(button + 3) % len(seats)]
+            start = self.players.index(first)
         else:
-            # 单挑翻牌前（庄家/小盲先动）或翻牌后（小盲先动）
-            start = (self.dealer_idx + 1) % n
-
-        ordered = []
-        for i in range(n):
-            p = self.players[(start + i) % n]
-            if p.status == PlayerStatus.ACTIVE:
-                ordered.append(p)
-        return ordered
+            start = (self.dealer_idx + 1) % len(self.players)
+        return [
+            self.players[(start + i) % len(self.players)]
+            for i in range(len(self.players))
+            if self.players[(start + i) % len(self.players)].status == PlayerStatus.ACTIVE
+            and self.players[(start + i) % len(self.players)].id in self.pending_actors
+        ]
 
     # ──────────────────────────────────────────
     # 3. 边池计算
@@ -366,6 +406,8 @@ class GameEngine:
         支持边池和平局均分
         返回包含筹码变化的结果
         """
+        if self._allocations is not None:
+            return self._allocations
         pots = self.calculate_side_pots()
         allocations = []
 
@@ -438,7 +480,20 @@ class GameEngine:
                     "reason": "no_win"
                 })
 
-        return allocations
+        # One settlement row per player, even when they win several side pots.
+        totals = {}
+        for allocation in allocations:
+            pid = allocation["playerId"]
+            if pid not in totals:
+                totals[pid] = dict(allocation)
+            else:
+                totals[pid]["amount"] += allocation["amount"]
+                if allocation["bestHand"]:
+                    totals[pid].update(bestHand=allocation["bestHand"], handRank=allocation["handRank"], reason=allocation["reason"])
+        for pid, allocation in totals.items():
+            allocation["stackChange"] = self._get_player(pid).stack - self.hand_start_stacks[pid]
+        self._allocations = list(totals.values())
+        return self._allocations
 
     # ──────────────────────────────────────────
     # 5. 工具方法
@@ -454,14 +509,17 @@ class GameEngine:
 
     def get_valid_actions(self, player: Player) -> List[ActionType]:
         """返回玩家当前可以执行的合法行动"""
+        if player.status != PlayerStatus.ACTIVE or self.phase in (GamePhase.SHOWDOWN, GamePhase.ENDED):
+            return []
         actions = [ActionType.FOLD]
-        if player.current_bet == self.street_bet:
-            actions.append(ActionType.CHECK)
-        else:
-            actions.append(ActionType.CALL)
+        to_call = max(0, self.street_bet - player.current_bet)
+        actions.append(ActionType.CHECK if to_call == 0 else ActionType.CALL)
+        opponents_can_bet = any(p.id != player.id for p in self.active_players())
         if player.stack > 0:
-            actions.append(ActionType.RAISE)
-            actions.append(ActionType.ALLIN)
+            if self.can_raise(player) and opponents_can_bet and player.stack + player.current_bet >= self.minimum_raise_to():
+                actions.append(ActionType.RAISE)
+            if player.stack <= to_call or (self.can_raise(player) and opponents_can_bet):
+                actions.append(ActionType.ALLIN)
         return actions
 
     def reset_for_new_hand(self):
@@ -492,9 +550,16 @@ class GameEngine:
         self.total_bets = {p.id: 0.0 for p in self.players}
 
         # 轮转庄家位置
-        self.dealer_idx = (self.dealer_idx + 1) % len(self.players)
+        self.dealer_idx = self._next_live_seat(self.dealer_idx)
+        self.hand_player_ids = {p.id for p in self.players if p.stack > 0}
+        self.last_full_raise = self.big_blind
+        self.acted_bets = {}
+        self.last_actor_idx = None
+        self.betting_started = False
+        self._allocations = None
+        self.pots = []
 
-    def get_state_snapshot(self) -> dict:
+    def get_state_snapshot(self, viewer_id: Optional[str] = None) -> dict:
         """返回当前游戏状态的快照（用于前端和 Prompt 构建）"""
         return {
             "phase": self.phase.value,
@@ -512,7 +577,11 @@ class GameEngine:
                     "status": p.status.value,
                     "position": p.position,
                     "isHuman": p.player_type == "human",
-                    "holeCards": [{"rank": c.rank, "suit": c.suit} for c in p.hole_cards],
+                    "holeCards": [
+                        {"rank": c.rank, "suit": c.suit} for c in p.hole_cards
+                    ] if p.id == viewer_id or (
+                        self.phase == GamePhase.SHOWDOWN and p.status != PlayerStatus.FOLDED
+                    ) else [],
                 }
                 for p in self.players
             ],

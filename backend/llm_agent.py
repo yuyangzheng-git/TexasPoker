@@ -2,6 +2,7 @@
 LLM Agent - Claude Haiku 版本
 使用 claude-haiku-4-5-20251001 模型
 """
+import settings  # Ensure config is loaded for standalone benchmarks too.
 import re
 import asyncio
 import os
@@ -83,13 +84,11 @@ class ResponseParser:
             return Action(player_id=player.id, type=ActionType.CALL, amount=amt)
         if action.type == ActionType.CALL and game.street_bet == player.current_bet:
             return Action(player_id=player.id, type=ActionType.CHECK)
+        valid = game.get_valid_actions(player)
+        if action.type not in valid:
+            return Action(player.id, ActionType.CHECK if ActionType.CHECK in valid else ActionType.CALL)
         if action.type == ActionType.RAISE:
-            min_r = max(game.street_bet * 2, game.big_blind)
-            max_r = player.stack + player.current_bet
-            if action.amount < min_r:
-                action.amount = min_r
-            if action.amount > max_r:
-                return Action(player_id=player.id, type=ActionType.ALLIN, amount=player.stack)
+            action.amount = min(max(action.amount, game.minimum_raise_to()), player.stack + player.current_bet)
         return action
 
     @staticmethod
@@ -164,13 +163,16 @@ class LLMAgent:
         4. 解析响应 + 规则校验
         """
         model = self._select_model(game.phase)
-        prompt = PromptBuilder.build(self.config, self.player, game, self.memory)
+        async def request():
+            # Equity estimation is CPU work; keep WebSocket commands responsive.
+            prompt = await asyncio.to_thread(PromptBuilder.build, self.config, self.player, game, self.memory)
+            return await self._call_api(prompt, model, on_chunk)
 
         print(f"[{self.config['name']}] phase={game.phase.value}  model={model}")
 
         try:
             raw, usage = await asyncio.wait_for(
-                self._call_api(prompt, model, on_chunk),
+                request(),
                 timeout=timeout
             )
             parsed = ResponseParser.parse(raw, self.player, game)
@@ -178,7 +180,7 @@ class LLMAgent:
             return parsed
 
         except asyncio.TimeoutError:
-            fallback = ResponseParser._fallback_action(self.player, game)
+            fallback = await asyncio.to_thread(ResponseParser._fallback_action, self.player, game)
             return ParsedResponse(
                 thinking=f"（{model} 超时，自动决策）",
                 action=fallback, speech="",
@@ -186,7 +188,7 @@ class LLMAgent:
             )
         except Exception as e:
             print(f"[LLMAgent:{self.config['name']}] API error: {e}")
-            fallback = ResponseParser._fallback_action(self.player, game)
+            fallback = await asyncio.to_thread(ResponseParser._fallback_action, self.player, game)
             return ParsedResponse(
                 thinking=f"（API 错误，自动决策: {str(e)[:40]}）",
                 action=fallback, speech="",

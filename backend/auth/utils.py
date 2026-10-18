@@ -1,27 +1,39 @@
 """Authentication utilities - password hashing and JWT tokens"""
-import os
-from datetime import datetime, timedelta
+import hashlib
+import hmac
+import secrets
+import bcrypt
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from passlib.context import CryptContext
+from settings import JWT_SECRET_KEY
 from jose import JWTError, jwt
 
 # Security configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "poker-llm-secret-key-change-in-production-2024")
+SECRET_KEY = JWT_SECRET_KEY
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
-# Password hashing context
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain password against a hashed password"""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify scrypt passwords and existing bcrypt records without passlib."""
+    try:
+        if hashed_password.startswith("scrypt$"):
+            _, salt_hex, digest_hex = hashed_password.split("$")
+            digest = hashlib.scrypt(plain_password.encode(), salt=bytes.fromhex(salt_hex),
+                n=16384, r=8, p=1, dklen=32)
+            return hmac.compare_digest(digest, bytes.fromhex(digest_hex))
+        if hashed_password.startswith(("$2a$", "$2b$", "$2y$")):
+            # Legacy bcrypt records were limited to their first 72 bytes.
+            return bcrypt.checkpw(plain_password.encode()[:72], hashed_password.encode())
+    except (ValueError, TypeError):
+        pass
+    return False
 
 
 def get_password_hash(password: str) -> str:
-    """Hash a password using bcrypt"""
-    return pwd_context.hash(password)
+    """New records use scrypt, including long Unicode passwords without truncation."""
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=16384, r=8, p=1, dklen=32)
+    return f"scrypt${salt.hex()}${digest.hex()}"
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -38,9 +50,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode = data.copy()
 
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+        expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)

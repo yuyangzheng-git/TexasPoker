@@ -81,8 +81,8 @@ const UsersPage: React.FC = () => {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">User Management</h1>
-        <p className="text-gray-400 mt-1">Manage user accounts and permissions</p>
+        <h1 className="text-3xl font-bold text-white">成员管理</h1>
+        <p className="text-gray-400 mt-1">查找成员、查看账户状态与管理权限</p>
       </div>
 
       {error && (
@@ -109,10 +109,10 @@ const UsersPage: React.FC = () => {
             onChange={(e) => { setRoleFilter(e.target.value); setPage(1); }}
             className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
-            <option value="">All Roles</option>
-            <option value="user">User</option>
-            <option value="admin">Admin</option>
-            <option value="super_admin">Super Admin</option>
+            <option value="">全部身份</option>
+            <option value="user">成员</option>
+            <option value="admin">管理员</option>
+            <option value="super_admin">超级管理员</option>
           </select>
           <select
             value={activeFilter === undefined ? '' : activeFilter.toString()}
@@ -123,15 +123,15 @@ const UsersPage: React.FC = () => {
             }}
             className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
-            <option value="">All Status</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
+            <option value="">全部状态</option>
+            <option value="true">已启用</option>
+            <option value="false">已停用</option>
           </select>
           <button
             type="submit"
             className="px-6 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
           >
-            Search
+            搜索
           </button>
         </form>
       </div>
@@ -149,13 +149,13 @@ const UsersPage: React.FC = () => {
                 <thead>
                   <tr className="bg-gray-700/50">
                     <th className="text-left py-3 px-4 text-gray-400 font-medium">ID</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Username</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Email</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Role</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Status</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Created</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Last Login</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Actions</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">用户名</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">邮箱</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">身份</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">状态</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">加入时间</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">最近登录</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -201,7 +201,7 @@ const UsersPage: React.FC = () => {
                           onClick={() => handleEditUser(user)}
                           className="text-blue-400 hover:text-blue-300 text-sm"
                         >
-                          Edit
+                          编辑
                         </button>
                       </td>
                     </tr>
@@ -221,7 +221,7 @@ const UsersPage: React.FC = () => {
                   disabled={page === 1}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded transition-colors"
                 >
-                  Previous
+                  上一页
                 </button>
                 <span className="px-3 py-1 text-gray-400">
                   Page {page} of {totalPages}
@@ -231,7 +231,7 @@ const UsersPage: React.FC = () => {
                   disabled={page === totalPages}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded transition-colors"
                 >
-                  Next
+                  下一页
                 </button>
               </div>
             </div>
@@ -249,16 +249,16 @@ const UsersPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Role
+                  身份
                 </label>
                 <select
                   value={editRole}
                   onChange={(e) => setEditRole(e.target.value)}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
-                  <option value="super_admin">Super Admin</option>
+                  <option value="user">成员</option>
+                  <option value="admin">管理员</option>
+                  <option value="super_admin">超级管理员</option>
                 </select>
               </div>
               <div>
@@ -269,7 +269,7 @@ const UsersPage: React.FC = () => {
                     onChange={(e) => setEditActive(e.target.checked)}
                     className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500"
                   />
-                  <span className="text-gray-300">Account Active</span>
+                  <span className="text-gray-300">启用账户</span>
                 </label>
               </div>
             </div>
@@ -278,13 +278,13 @@ const UsersPage: React.FC = () => {
                 onClick={handleSaveUser}
                 className="flex-1 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors"
               >
-                Save Changes
+                保存修改
               </button>
               <button
                 onClick={() => setEditingUser(null)}
                 className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
               >
-                Cancel
+                取消
               </button>
             </div>
           </div>

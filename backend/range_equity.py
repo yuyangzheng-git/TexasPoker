@@ -95,7 +95,7 @@ def infer_range(game: GameEngine, opponent: Player, tracker=None) -> RangeSpec:
             raising = act.type == ActionType.RAISE or (
                 act.type == ActionType.ALLIN and act.amount > street_bet)
             if raising:
-                target = act.amount if act.type == ActionType.RAISE else max(act.amount, street_bet * 2)
+                target = act.amount
                 if is_me:
                     acted = True
                     if raises == 0:
@@ -269,8 +269,8 @@ def range_equity(
             wins += 1
         elif me == best:
             wins += 1.0 / (1 + ties)
-        # 对照：同一条牌面下，对手换成随机手牌
-        rnd = rng.sample(rest, 2 * len(opp_hands) + need)
+        # Independent uniform baseline: exclude only hero and known board.
+        rnd = rng.sample(deck, 2 * len(opp_hands) + need)
         rb = board + rnd[:need]
         me2 = evaluate7(hero + rb)
         best2, ties2 = -1, 0

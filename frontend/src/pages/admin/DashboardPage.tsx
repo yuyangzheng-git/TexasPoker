@@ -80,35 +80,35 @@ const DashboardPage: React.FC = () => {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-        <p className="text-gray-400 mt-1">System overview and statistics</p>
+        <h1 className="text-3xl font-bold text-white">概览</h1>
+        <p className="text-gray-400 mt-1">已记录的俱乐部数据与系统运行状态</p>
       </div>
 
       {/* Overview Stats */}
       {overview && (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Total Users</p>
+            <p className="text-gray-400 text-sm">成员总数</p>
             <p className="text-2xl font-bold text-white">{overview.total_users}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Active Users</p>
+            <p className="text-gray-400 text-sm">活跃成员</p>
             <p className="text-2xl font-bold text-green-400">{overview.active_users}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Total Games</p>
+            <p className="text-gray-400 text-sm">对局总数</p>
             <p className="text-2xl font-bold text-white">{overview.total_games}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Games Today</p>
+            <p className="text-gray-400 text-sm">今日对局</p>
             <p className="text-2xl font-bold text-blue-400">{overview.games_today}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Total Hands</p>
+            <p className="text-gray-400 text-sm">累计手数</p>
             <p className="text-2xl font-bold text-white">{overview.total_hands_played}</p>
           </div>
           <div className="bg-gray-800 rounded-xl p-4">
-            <p className="text-gray-400 text-sm">Active AI Agents</p>
+            <p className="text-gray-400 text-sm">启用的 AI 对手</p>
             <p className="text-2xl font-bold text-purple-400">{overview.active_ai_agents}</p>
           </div>
         </div>
@@ -118,11 +118,11 @@ const DashboardPage: React.FC = () => {
         {/* System Status */}
         {systemStatus && (
           <div className="bg-gray-800 rounded-xl p-6">
-            <h2 className="text-xl font-bold text-white mb-4">System Status</h2>
+            <h2 className="text-xl font-bold text-white mb-4">系统状态</h2>
             <div className="space-y-4">
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-gray-400">CPU Usage</span>
+                  <span className="text-gray-400">CPU 使用率</span>
                   <span className="text-white">{systemStatus.cpu_percent.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
@@ -136,7 +136,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-gray-400">Memory Usage</span>
+                  <span className="text-gray-400">内存使用率</span>
                   <span className="text-white">{systemStatus.memory_percent.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
@@ -150,7 +150,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <div>
                 <div className="flex justify-between mb-1">
-                  <span className="text-gray-400">Disk Usage</span>
+                  <span className="text-gray-400">磁盘使用率</span>
                   <span className="text-white">{systemStatus.disk_percent.toFixed(1)}%</span>
                 </div>
                 <div className="w-full bg-gray-700 rounded-full h-2">
@@ -164,7 +164,7 @@ const DashboardPage: React.FC = () => {
               </div>
               <div className="pt-4 border-t border-gray-700 grid grid-cols-3 gap-4 text-center">
                 <div>
-                  <p className="text-gray-400 text-sm">Active Games</p>
+                  <p className="text-gray-400 text-sm">进行中对局</p>
                   <p className="text-xl font-bold text-white">{systemStatus.active_games}</p>
                 </div>
                 <div>
@@ -172,7 +172,7 @@ const DashboardPage: React.FC = () => {
                   <p className="text-xl font-bold text-white">{systemStatus.active_connections}</p>
                 </div>
                 <div>
-                  <p className="text-gray-400 text-sm">Uptime</p>
+                  <p className="text-gray-400 text-sm">运行时长</p>
                   <p className="text-xl font-bold text-white">{formatUptime(systemStatus.uptime_seconds)}</p>
                 </div>
               </div>
@@ -182,7 +182,7 @@ const DashboardPage: React.FC = () => {
 
         {/* Leaderboard */}
         <div className="bg-gray-800 rounded-xl p-6">
-          <h2 className="text-xl font-bold text-white mb-4">Top Players</h2>
+          <h2 className="text-xl font-bold text-white mb-4">成员排行</h2>
           {leaderboard.length > 0 ? (
             <div className="space-y-3">
               {leaderboard.map((entry, idx) => (
@@ -231,9 +231,9 @@ const DashboardPage: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-gray-700">
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Date</th>
-                    <th className="text-right py-3 px-4 text-gray-400 font-medium">Games</th>
-                    <th className="text-right py-3 px-4 text-gray-400 font-medium">Hands</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">日期</th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-medium">对局</th>
+                    <th className="text-right py-3 px-4 text-gray-400 font-medium">手数</th>
                     <th className="text-right py-3 px-4 text-gray-400 font-medium">Players</th>
                   </tr>
                 </thead>
