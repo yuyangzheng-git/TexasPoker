@@ -72,8 +72,8 @@ const GamesPage: React.FC = () => {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Game Sessions</h1>
-        <p className="text-gray-400 mt-1">View and analyze game history</p>
+        <h1 className="text-3xl font-bold text-white">对局记录</h1>
+        <p className="text-gray-400 mt-1">查看已记录的对局与结算信息</p>
       </div>
 
       {error && (
@@ -93,10 +93,10 @@ const GamesPage: React.FC = () => {
             onChange={(e) => { setResultFilter(e.target.value); setPage(1); }}
             className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
           >
-            <option value="">All Results</option>
-            <option value="win">Win</option>
-            <option value="loss">Loss</option>
-            <option value="draw">Draw</option>
+            <option value="">全部结果</option>
+            <option value="win">获胜</option>
+            <option value="loss">失利</option>
+            <option value="draw">平局</option>
           </select>
           <div className="text-gray-400 flex items-center">
             Total: {totalGames} games
@@ -116,15 +116,15 @@ const GamesPage: React.FC = () => {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-700/50">
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Game ID</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Player</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Started</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Duration</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Hands</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Stack Change</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Result</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">AI Opponents</th>
-                    <th className="text-left py-3 px-4 text-gray-400 font-medium">Actions</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">牌局编号</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">玩家</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">开始时间</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">时长</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">手数</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">筹码净变化</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">结果</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">AI 对手</th>
+                    <th className="text-left py-3 px-4 text-gray-400 font-medium">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -179,7 +179,7 @@ const GamesPage: React.FC = () => {
                               {game.result}
                             </span>
                           ) : (
-                            <span className="text-yellow-400 text-xs">In progress</span>
+                            <span className="text-yellow-400 text-xs">进行中</span>
                           )}
                         </td>
                         <td className="py-3 px-4 text-gray-400 text-sm">
@@ -195,7 +195,7 @@ const GamesPage: React.FC = () => {
                             onClick={() => handleViewGame(game.game_id)}
                             className="text-blue-400 hover:text-blue-300 text-sm"
                           >
-                            View Details
+                            查看详情
                           </button>
                         </td>
                       </tr>
@@ -216,7 +216,7 @@ const GamesPage: React.FC = () => {
                   disabled={page === 1}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded transition-colors"
                 >
-                  Previous
+                  上一页
                 </button>
                 <span className="px-3 py-1 text-gray-400">
                   Page {page} of {totalPages}
@@ -226,7 +226,7 @@ const GamesPage: React.FC = () => {
                   disabled={page === totalPages}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 disabled:text-gray-600 text-white rounded transition-colors"
                 >
-                  Next
+                  下一页
                 </button>
               </div>
             </div>
@@ -252,7 +252,7 @@ const GamesPage: React.FC = () => {
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="bg-gray-700/50 rounded-lg p-3">
-                <p className="text-gray-400 text-sm">Player</p>
+                <p className="text-gray-400 text-sm">玩家</p>
                 <p className="text-white">
                   {selectedGame.user
                     ? selectedGame.user.username
@@ -260,7 +260,7 @@ const GamesPage: React.FC = () => {
                 </p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3">
-                <p className="text-gray-400 text-sm">Total Hands</p>
+                <p className="text-gray-400 text-sm">累计手数</p>
                 <p className="text-white">{selectedGame.game.total_hands}</p>
               </div>
               <div className="bg-gray-700/50 rounded-lg p-3">
@@ -275,7 +275,7 @@ const GamesPage: React.FC = () => {
               </div>
             </div>
 
-            <h4 className="text-lg font-bold text-white mb-3">Hand History</h4>
+            <h4 className="text-lg font-bold text-white mb-3">手牌记录</h4>
             {selectedGame.hands.length > 0 ? (
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -283,7 +283,7 @@ const GamesPage: React.FC = () => {
                     <tr className="bg-gray-700/50">
                       <th className="text-left py-2 px-3 text-gray-400 text-sm">Hand #</th>
                       <th className="text-left py-2 px-3 text-gray-400 text-sm">Pot Size</th>
-                      <th className="text-left py-2 px-3 text-gray-400 text-sm">Result</th>
+                      <th className="text-left py-2 px-3 text-gray-400 text-sm">结果</th>
                       <th className="text-left py-2 px-3 text-gray-400 text-sm">Chips +/-</th>
                       <th className="text-left py-2 px-3 text-gray-400 text-sm">Final Hand</th>
                     </tr>
@@ -337,7 +337,7 @@ const GamesPage: React.FC = () => {
                 onClick={() => setSelectedGame(null)}
                 className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
               >
-                Close
+                关闭
               </button>
             </div>
           </div>

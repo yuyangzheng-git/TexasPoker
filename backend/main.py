@@ -1,24 +1,31 @@
 """
 FastAPI 主入口 + WebSocket 游戏服务器
 """
+import settings  # Load config before auth/database/LLM imports.
 import os
 import json
 import asyncio
 import random
+import secrets
+import time
 from pathlib import Path
-from typing import Dict, List
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from typing import Dict, List, Literal
+from pydantic import BaseModel, Field
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
-from game_engine import GameEngine, Player, GamePhase
+from game_engine import GameEngine, Player
 from llm_agent import LLMAgent
+from strategy_agent import StrategyAgent
 from game_logger import GameLogger
+from game_session import GameSession
 
 # Import auth and admin modules
 from database.connection import init_db
 from auth import router as auth_router
 from admin import router as admin_router
+from auth.dependencies import get_admin_user
 
 # 配置与日志目录（基于本文件位置，与运行目录无关）
 BASE_DIR = Path(__file__).resolve().parent
@@ -41,19 +48,13 @@ app.include_router(admin_router)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://101.35.6.63:3001", "http://101.35.6.63"],
+    allow_origins=[origin.strip() for origin in os.getenv("FRONTEND_URL", "http://localhost:3000").split(",")],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # 活跃游戏会话
 active_games: Dict[str, dict] = {}
-
-# WebSocket 连接池
-connections: Dict[str, WebSocket] = {}
-
-# 游戏暂停状态
-game_paused: Dict[str, asyncio.Event] = {}
 
 # ─── AI 自动补位：难度/主题常量 ───────────────────────────────────────────
 
@@ -179,14 +180,35 @@ def _auto_fill_ai(
 # ─── 游戏 API ───────────────────────────────────────────────────────────
 
 
+class CreateGameRequest(BaseModel):
+    player_name: str = Field(default="Player", min_length=1, max_length=50)
+    table_size: int = Field(default=9, ge=2, le=9)
+    num_agents: int = Field(default=3, ge=1, le=8)
+    ai_fill_enabled: bool = True
+    ai_difficulty_level: Literal["easy", "medium", "hard", "mixed"] = "mixed"
+    ai_persona_theme: Literal["aggressive", "balanced", "beginner_friendly", "random"] = "balanced"
+    preferred_ai_personas: List[str] = Field(default_factory=list, max_length=8)
+    agent_ids: List[str] = Field(default_factory=list, max_length=8)
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "agent_mode": settings.POKER_AGENT_MODE}
+
+
+@app.get("/api/local-mode")
+async def runtime_mode():
+    return {"mode": settings.POKER_AGENT_MODE, "paid_api_calls": settings.POKER_AGENT_MODE == "llm"}
+
+
 @app.post("/api/games")
-async def create_game(body: dict):
+async def create_game(body: CreateGameRequest, request: Request):
     """创建新牌局"""
     import uuid
     import json
 
-    game_id = str(uuid.uuid4())[:8]
-    api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    body = body.model_dump()
+    game_id = str(uuid.uuid4())
 
     # 加载 Agent 人格配置
     with open(CONFIG_DIR / "agent_personas.json", encoding="utf-8") as f:
@@ -194,6 +216,13 @@ async def create_game(body: dict):
 
     with open(CONFIG_DIR / "game_config.json", encoding="utf-8") as f:
         game_cfg = json.load(f)
+
+    known_ids = {p["id"] for p in all_personas}
+    for ids in (body["agent_ids"], body["preferred_ai_personas"]):
+        if len(ids) != len(set(ids)) or not set(ids) <= known_ids:
+            raise HTTPException(status_code=422, detail="Unknown or duplicate AI persona")
+    if len(body["agent_ids"]) >= body["table_size"]:
+        raise HTTPException(status_code=422, detail="Selected agents exceed table size")
 
     # 创建玩家列表
     players = []
@@ -243,14 +272,14 @@ async def create_game(body: dict):
         auto_fill_personas = []
 
     # 合并手动选择和自动补位
-    all_selected_personas = manually_selected_personas + auto_fill_personas
+    all_selected_personas = (manually_selected_personas + auto_fill_personas)[:table_size - 1]
 
     # 如果没有任何 AI（包括自动补位关闭且未手动选择），使用旧逻辑 fallback
     if not all_selected_personas:
         if agent_ids and isinstance(agent_ids, list):
             all_selected_personas = [p for p in all_personas if p["id"] in agent_ids]
         else:
-            all_selected_personas = all_personas[:num_agents]
+            all_selected_personas = all_personas[:min(num_agents, table_size - 1)]
 
     # 验证最低人数：至少需要 2 名玩家
     total_players = human_count + len(all_selected_personas)
@@ -269,7 +298,11 @@ async def create_game(body: dict):
             agent_config=persona
         )
         players.append(agent_player)
-        agent_map[agent_player.id] = LLMAgent(persona, agent_player)
+        try:
+            agent_class = StrategyAgent if settings.POKER_AGENT_MODE == "strategy" else LLMAgent
+            agent_map[agent_player.id] = agent_class(persona, agent_player)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="AI client unavailable; check server API configuration") from exc
 
     # 随机打乱玩家座位顺序
     random.shuffle(players)
@@ -291,9 +324,13 @@ async def create_game(body: dict):
         "logger": logger
     }
 
+    session = GameSession(game, agent_map, game_cfg, logger)
+    active_games[game_id]["session"] = session
+    active_games[game_id]["expiry_task"] = asyncio.create_task(expire_game(game_id, session))
     return {
+        "sessionToken": session.token,
         "gameId": game_id,
-        "wsUrl": f"ws://localhost:8000/ws/{game_id}",
+        "wsUrl": str(request.base_url).replace("https://", "wss://").replace("http://", "ws://").rstrip("/") + f"/ws/{game_id}",
         "players": [{"id": p.id, "name": p.name, "stack": p.stack} for p in players]
     }
 
@@ -302,7 +339,7 @@ async def create_game(body: dict):
 
 
 @app.get("/api/logs")
-async def list_logs(limit: int = 20):
+async def list_logs(limit: int = 20, admin=Depends(get_admin_user)):
     """列出所有游戏日志"""
     if not LOG_DIR.exists():
         return {"logs": []}
@@ -329,9 +366,11 @@ async def list_logs(limit: int = 20):
 
 
 @app.get("/api/logs/{filename}")
-async def get_log(filename: str):
+async def get_log(filename: str, admin=Depends(get_admin_user)):
     """获取特定日志详情"""
-    log_file = LOG_DIR / filename
+    log_file = (LOG_DIR / filename).resolve()
+    if log_file.parent != LOG_DIR.resolve() or log_file.suffix != ".json":
+        raise HTTPException(status_code=404, detail="Log not found")
     if not log_file.exists():
         raise HTTPException(status_code=404, detail="Log not found")
 
@@ -343,9 +382,11 @@ async def get_log(filename: str):
 
 
 @app.get("/api/logs/{filename}/summary")
-async def get_log_summary(filename: str):
+async def get_log_summary(filename: str, admin=Depends(get_admin_user)):
     """获取日志摘要"""
-    log_file = LOG_DIR / filename
+    log_file = (LOG_DIR / filename).resolve()
+    if log_file.parent != LOG_DIR.resolve() or log_file.suffix != ".json":
+        raise HTTPException(status_code=404, detail="Log not found")
     if not log_file.exists():
         raise HTTPException(status_code=404, detail="Log not found")
 
@@ -394,402 +435,59 @@ async def get_log_summary(filename: str):
 @app.websocket("/ws/{game_id}")
 async def websocket_endpoint(websocket: WebSocket, game_id: str):
     await websocket.accept()
-    connections[game_id] = websocket
-
-    # 初始化暂停状态（默认不暂停）
-    game_paused[game_id] = asyncio.Event()
-    game_paused[game_id].set()  # set = not paused
-
+    session = None
     try:
+        # Authenticate in the first frame, keeping bearer credentials out of URLs/logs.
+        auth = await asyncio.wait_for(websocket.receive_json(), 10)
         game_data = active_games.get(game_id)
-        if not game_data:
-            await websocket.send_json({"type": "ERROR", "data": {"message": "Game not found"}})
+        session = game_data.get("session") if game_data else None
+        token = auth.get("sessionToken") if isinstance(auth, dict) else None
+        if not session or not isinstance(auth, dict) or auth.get("type") != "AUTH" or not isinstance(token, str) or not secrets.compare_digest(session.token.encode(), token.encode()):
+            await websocket.close(code=4403)
             return
-
-        game: GameEngine = game_data["engine"]
-        agents: dict = game_data["agents"]
-        cfg: dict = game_data["config"]
-        logger: GameLogger = game_data["logger"]
-
-        # 发牌开始
-        game.deal_hole_cards()
-        game.post_blinds()
-
-        # 记录第一手牌开始
-        logger.log_hand_start(
-            hand_number=1,
-            dealer_idx=game.dealer_idx,
-            players_state=[
-                {
-                    "id": p.id,
-                    "name": p.name,
-                    "stack": p.stack,
-                    "position": p.position,
-                    "hole_cards": [c.to_string() for c in p.hole_cards],
-                }
-                for p in game.players
-            ]
-        )
-        logger.log_phase_change(
-            phase="pre_flop",
-            community_cards=[],
-            pot=game.pot
-        )
-
-        await broadcast(websocket, "GAME_STARTED", game.get_state_snapshot())
-
-        # 多局游戏循环
-        hand_count = 0
+        if session.socket is not None:
+            await websocket.close(code=4409)
+            return
+        session.socket = websocket
+        session.last_seen = time.monotonic()
+        if session.task is None:
+            session.task = asyncio.create_task(session.run())
+        await session.replay()
         while True:
-            hand_count += 1
-
-            # 检查是否还有多于1名玩家有筹码
-            players_with_chips = [p for p in game.players if p.stack > 0]
-            if len(players_with_chips) <= 1:
-                # 游戏结束，只剩一人
-                logger.log_tournament_end(
-                    winner=players_with_chips[0].name if players_with_chips else "Unknown",
-                    final_stacks={p.id: p.stack for p in game.players}
-                )
-                await broadcast(websocket, "TOURNAMENT_ENDED", {
-                    "winner": players_with_chips[0].name if players_with_chips else "Unknown",
-                    "finalStacks": {p.id: p.stack for p in game.players}
-                })
-                break
-
-            # 单局游戏循环
-            while game.phase not in (GamePhase.ENDED, GamePhase.SHOWDOWN):
-
-                # 检查是否只剩一人
-                remaining = game.non_folded_players()
-                if len(remaining) <= 1:
-                    allocations = game.determine_winners()
-                    logger.log_hand_result(allocations, game.pot)
-                    await broadcast(websocket, "GAME_ENDED", {
-                        "allocations": allocations,
-                        "finalState": game.get_state_snapshot()
-                    })
-                    game.phase = GamePhase.ENDED
-                    break
-
-                active = game.get_action_order()
-                round_complete = False
-                print(f"[DEBUG] Starting action round: phase={game.phase.value}, active_count={len(active)}, pending={game.pending_actors}")
-
-                for player in active:
-                    # 每轮开始前重新检查
-                    if game.phase in (GamePhase.ENDED, GamePhase.SHOWDOWN):
-                        round_complete = True
-                        break
-
-                    if player.player_type == "llm_agent":
-                        agent = agents.get(player.id)
-                        if not agent:
-                            continue
-
-                        # 等待暂停恢复
-                        await game_paused[game_id].wait()
-
-                        await broadcast(websocket, "AGENT_THINKING_START", {"agentId": player.id})
-
-                        def on_chunk(agent_id: str, text: str):
-                            asyncio.create_task(
-                                broadcast(websocket, "AGENT_THINKING_CHUNK",
-                                          {"agentId": agent_id, "chunk": text})
-                            )
-
-                        timeout = cfg["game"]["agent_timeout_ms"] / 1000
-                        response = await agent.decide(game, timeout=timeout, on_chunk=on_chunk)
-
-                        await broadcast(websocket, "AGENT_THINKING_END", {
-                            "agentId": player.id,
-                            "action": response.action.type.value if response.action else "fold",
-                            "speech": response.speech
-                        })
-
-                        if response.action:
-                            game.process_action(response.action)
-                        if response.speech:
-                            game.record_speech(player.id, response.speech)
-                            logger.log_speech(player.id, player.name, response.speech, game.phase.value)
-
-                        # 记录AI行动
-                        logger.log_player_action(
-                            player_id=player.id,
-                            player_name=player.name,
-                            action=response.action.type.value if response.action else "fold",
-                            amount=response.action.amount if response.action else 0,
-                            phase=game.phase.value,
-                            pot_after=game.pot,
-                            stack_after=player.stack,
-                            thinking=response.thinking
-                        )
-
-                        await broadcast(websocket, "PLAYER_ACTION", {
-                            "playerId": player.id,
-                            "action": response.action.type.value if response.action else "fold",
-                            "amount": response.action.amount if response.action else 0,
-                            "pot": game.pot,
-                            "stateSnapshot": game.get_state_snapshot()
-                        })
-
-                    else:
-                        # 真人玩家
-                        valid_actions = game.get_valid_actions(player)
-                        timeout_ms = cfg["game"]["human_timeout_ms"]
-
-                        await broadcast(websocket, "PLAYER_ACTION_REQUEST", {
-                            "playerId": player.id,
-                            "validActions": [a.value for a in valid_actions],
-                            "callAmount": max(0, game.street_bet - player.current_bet),
-                            "pot": game.pot,
-                            "timeLimit": timeout_ms
-                        })
-
-                        try:
-                            msg = await asyncio.wait_for(
-                                websocket.receive_json(),
-                                timeout=timeout_ms / 1000
-                            )
-                            # 处理暂停/恢复消息
-                            if msg.get("type") == "PAUSE":
-                                game_paused[game_id].clear()
-                                continue
-                            if msg.get("type") == "RESUME":
-                                game_paused[game_id].set()
-                                continue
-                            from game_engine import Action, ActionType
-
-                            # 处理人类玩家的发言
-                            human_speech = msg.get("speech", "")
-                            if human_speech:
-                                game.record_speech(player.id, human_speech)
-                                logger.log_speech(player.id, player.name, human_speech, game.phase.value)
-
-                            human_action = Action(
-                                player_id=player.id,
-                                type=ActionType(msg.get("action", "fold")),
-                                amount=msg.get("amount", 0)
-                            )
-                            game.process_action(human_action)
-                            print(f"[DEBUG] Human action processed: {human_action.type.value}")
-
-                            # 记录人类玩家行动
-                            logger.log_player_action(
-                                player_id=player.id,
-                                player_name=player.name,
-                                action=human_action.type.value,
-                                amount=human_action.amount,
-                                phase=game.phase.value,
-                                pot_after=game.pot,
-                                stack_after=player.stack
-                            )
-
-                            await broadcast(websocket, "PLAYER_ACTION", {
-                                "playerId": player.id,
-                                "action": human_action.type.value,
-                                "amount": human_action.amount,
-                                "speech": human_speech,
-                                "pot": game.pot,
-                                "stateSnapshot": game.get_state_snapshot()
-                            })
-                        except asyncio.TimeoutError:
-                            from game_engine import Action, ActionType
-                            if game.street_bet == player.current_bet:
-                                timeout_action = Action(player_id=player.id, type=ActionType.CHECK)
-                            else:
-                                timeout_action = Action(player_id=player.id, type=ActionType.FOLD)
-                            game.process_action(timeout_action)
-
-                            # 记录超时行动
-                            logger.log_player_action(
-                                player_id=player.id,
-                                player_name=player.name,
-                                action=timeout_action.type.value,
-                                amount=timeout_action.amount,
-                                phase=game.phase.value,
-                                pot_after=game.pot,
-                                stack_after=player.stack,
-                                thinking="(超时自动行动)"
-                            )
-
-                            await broadcast(websocket, "PLAYER_ACTION", {
-                                "playerId": player.id,
-                                "action": timeout_action.type.value,
-                                "amount": timeout_action.amount,
-                                "pot": game.pot,
-                                "stateSnapshot": game.get_state_snapshot()
-                            })
-                        except (RuntimeError, WebSocketDisconnect):
-                            # WebSocket 断开连接，将玩家视为弃牌
-                            print(f"[DEBUG] WebSocket disconnected during human turn, folding")
-                            from game_engine import Action, ActionType
-                            fold_action = Action(player_id=player.id, type=ActionType.FOLD)
-                            game.process_action(fold_action)
-                            raise WebSocketDisconnect()
-
-                    # 每次 action 后检查是否只剩一人
-                    if len(game.non_folded_players()) <= 1:
-                        allocations = game.determine_winners()
-                        logger.log_hand_result(allocations, game.pot)
-                        await broadcast(websocket, "GAME_ENDED", {
-                            "allocations": allocations,
-                            "finalState": game.get_state_snapshot()
-                        })
-                        game.phase = GamePhase.ENDED
-                        break
-
-                    # 每次 action 后检查下注轮是否结束
-                    betting_complete = game.is_betting_round_complete()
-                    print(f"[DEBUG] phase={game.phase.value}, betting_complete={betting_complete}, pending={game.pending_actors}, street_bet={game.street_bet}")
-                    if betting_complete:
-                        if game.phase == GamePhase.RIVER:
-                            game.phase = GamePhase.SHOWDOWN
-                            print(f"[DEBUG] Entering SHOWDOWN")
-                            logger.log_phase_change(
-                                phase="showdown",
-                                community_cards=[c.to_string() for c in game.community_cards],
-                                pot=game.pot
-                            )
-                            # 广播进入摊牌阶段
-                            await broadcast(websocket, "PHASE_CHANGED", game.get_state_snapshot())
-                        else:
-                            game.advance_phase()
-                            logger.log_phase_change(
-                                phase=game.phase.value,
-                                community_cards=[c.to_string() for c in game.community_cards],
-                                pot=game.pot
-                            )
-                            await broadcast(websocket, "PHASE_CHANGED", game.get_state_snapshot())
-                        round_complete = True
-                        break
-
-                if game.phase in (GamePhase.ENDED, GamePhase.SHOWDOWN):
-                    break
-                if round_complete:
-                    continue
-
-                # 无人行动(所有人 all-in), 自动推进行到 showdown
-                if not active:
-                    while game.phase != GamePhase.SHOWDOWN:
-                        game.advance_phase()
-                        logger.log_phase_change(
-                            phase=game.phase.value,
-                            community_cards=[c.to_string() for c in game.community_cards],
-                            pot=game.pot
-                        )
-                        await broadcast(websocket, "PHASE_CHANGED", game.get_state_snapshot())
-                        # 延迟以便前端展示每一轮发牌动画
-                        await asyncio.sleep(1.5)
-                    break
-
-            # 摊牌
-            if game.phase == GamePhase.SHOWDOWN:
-                print(f"[DEBUG] Processing SHOWDOWN")
-
-                # 先发送亮牌事件，让前端显示所有人的底牌
-                reveal_data = {
-                    "players": [
-                        {
-                            "id": p.id,
-                            "name": p.name,
-                            "holeCards": [{"rank": c.rank, "suit": c.suit} for c in p.hole_cards],
-                            "status": p.status.value,
-                        }
-                        for p in game.players
-                        if p.status.value != "folded"  # 只显示未弃牌玩家的牌
-                    ]
-                }
-                await broadcast(websocket, "REVEAL_ALL_CARDS", reveal_data)
-
-                # 记录摊牌信息
-                logger.log_showdown([
-                    {
-                        "id": p.id,
-                        "name": p.name,
-                        "hole_cards": [c.to_string() for c in p.hole_cards],
-                    }
-                    for p in game.players
-                    if p.status.value != "folded"
-                ])
-
-                # 等待3秒让玩家看清所有人的牌
-                await asyncio.sleep(3)
-
-                # 然后计算赢家并发送结算结果
-                print(f"[DEBUG] Calling determine_winners()")
-                allocations = game.determine_winners()
-                print(f"[DEBUG] SHOWDOWN allocations: {allocations}")
-
-                # 记录手牌结果
-                logger.log_hand_result(allocations, game.pot)
-
-                await broadcast(websocket, "SHOWDOWN", {
-                    "allocations": allocations,
-                    "finalState": game.get_state_snapshot()
-                })
-
-            # 等待玩家确认进入下一局
-            print(f"[DEBUG] Waiting for READY_FOR_NEXT_HAND...")
-            try:
-                while True:
-                    msg = await asyncio.wait_for(websocket.receive_json(), timeout=300)
-                    print(f"[DEBUG] Received message while waiting: {msg}")
-                    if msg.get("type") == "READY_FOR_NEXT_HAND":
-                        print(f"[DEBUG] Got READY_FOR_NEXT_HAND, proceeding to next hand")
-                        break
-                    if msg.get("type") == "PAUSE":
-                        game_paused[game_id].clear()
-                    if msg.get("type") == "RESUME":
-                        game_paused[game_id].set()
-                    # 忽略其他消息，继续等待
-            except asyncio.TimeoutError:
-                print(f"[DEBUG] Timeout waiting for READY_FOR_NEXT_HAND, auto-continuing")
-            except Exception as e:
-                print(f"[DEBUG] Exception while waiting for READY_FOR_NEXT_HAND: {e}")
-                raise  # 重新抛出异常，让外层处理
-
-            # 重置游戏状态以开始新的一手牌
-            game.reset_for_new_hand()
-            game.deal_hole_cards()
-            game.post_blinds()
-
-            # 记录新一手牌开始
-            logger.log_hand_start(
-                hand_number=hand_count + 1,
-                dealer_idx=game.dealer_idx,
-                players_state=[
-                    {
-                        "id": p.id,
-                        "name": p.name,
-                        "stack": p.stack,
-                        "position": p.position,
-                        "hole_cards": [c.to_string() for c in p.hole_cards],
-                    }
-                    for p in game.players
-                ]
-            )
-            logger.log_phase_change(
-                phase="pre_flop",
-                community_cards=[],
-                pot=game.pot
-            )
-
-            await broadcast(websocket, "HAND_STARTED", {
-                "handNumber": hand_count,
-                "gameState": game.get_state_snapshot()
-            })
-
-    except WebSocketDisconnect:
-        connections.pop(game_id, None)
-
-
-async def broadcast(websocket: WebSocket, event_type: str, data: dict):
-    """向客户端发送 WebSocket 消息"""
-    try:
-        await websocket.send_json({"type": event_type, "data": data})
-    except Exception:
+            await session.command(await websocket.receive_json())
+    except (WebSocketDisconnect, asyncio.TimeoutError, ValueError):
         pass
+    finally:
+        if session and session.socket is websocket:
+            session.socket = None
+            session.last_seen = time.monotonic()
+
+
+async def expire_game(game_id, session):
+    try:
+        while True:
+            await asyncio.sleep(30)
+            if session.socket is None and time.monotonic() - session.last_seen > 1800:
+                if session.task and not session.task.done():
+                    session.task.cancel()
+                    await asyncio.gather(session.task, return_exceptions=True)
+                active_games.pop(game_id, None)
+                return
+    except asyncio.CancelledError:
+        pass
+
+
+@app.on_event("shutdown")
+async def shutdown_sessions():
+    tasks = []
+    for data in active_games.values():
+        session = data["session"]
+        tasks.extend(t for t in (session.task, data.get("expiry_task")) if t is not None)
+        if session.socket:
+            await session.socket.close(code=1001)
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 if __name__ == "__main__":

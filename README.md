@@ -1,5 +1,11 @@
 # 德州扑克 LLM 多智能体游戏 | Texas Hold'em LLM Multi-Agent Game
 
+## 机制修复与运行说明
+
+下注规则、底牌过滤、断线恢复、账户兼容性及部署配置的最新说明见 [牌局机制改进说明](docs/mechanics-upgrade.md)。实时协议见 [WebSocket 协议](docs/websocket_protocol.md)。以下旧版架构规划中的部分目录和技术选型尚未落地，请以实际代码和上述运行说明为准。
+
+网页对局默认使用风格化本地策略 AI（无需 API 密钥），可通过 `POKER_AGENT_MODE=llm` 切换到已配置密钥的模型服务。生产部署见 [服务器部署说明](deploy/README.md)。
+
 ## English Overview
 
 This project is a Texas Hold'em simulation platform with LLM-based agents, Monte Carlo equity estimation, and real-time decision visualization. I built it as a testbed for studying AI decision-making under uncertainty and comparing language-model reasoning with algorithmic baselines.
@@ -263,6 +269,10 @@ What I fixed and verified in this repository (with automated checks):
 - Current `docs/benchmark-results.md` numbers are algorithmic-baseline sanity
   checks only (MC vs random; the 3-seed 95% t-CI includes zero); LLM
   comparisons are pending real API runs
+
+## 服务器部署
+
+生产环境部署与验收见 [deploy/README.md](deploy/README.md)。默认使用无需 API 密钥的本地策略 AI，前后端通过同源代理连接，账号与日志使用持久卷保存。
 
 ## 许可证
 

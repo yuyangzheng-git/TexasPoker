@@ -71,8 +71,8 @@ class TestBettingRound:
             game.process_action(action)
             assert game.pot >= initial_pot
 
-    def test_invalid_check_corrected(self):
-        """当有 street_bet 时 check 应被自动修正为 call"""
+    def test_invalid_check_rejected_without_charging_player(self):
+        """An invalid check must not silently spend the player's chips."""
         game = make_game()
         game.deal_hole_cards()
         game.street_bet = 50.0
@@ -81,8 +81,10 @@ class TestBettingRound:
         p.status = PlayerStatus.ACTIVE
         action = Action(player_id=p.id, type=ActionType.CHECK, amount=0.0)
         result = game.process_action(action)
-        # 应自动处理（call 50）
-        assert game.pot > 0
+        assert result is False
+        assert game.pot == 0
+        assert p.stack == 1000
+        assert game.action_history == []
 
 
 if __name__ == "__main__":

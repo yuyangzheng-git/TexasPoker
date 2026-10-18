@@ -1,0 +1,24 @@
+[Unit]
+Description=TexasPoker API and game sessions
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/opt/texaspoker/current/backend
+EnvironmentFile=/opt/texaspoker/shared/server.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/texaspoker/shared/venv/bin/uvicorn main:app --host 127.0.0.1 --port 18001 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/texaspoker/shared/data /opt/texaspoker/shared/logs
+
+[Install]
+WantedBy=multi-user.target

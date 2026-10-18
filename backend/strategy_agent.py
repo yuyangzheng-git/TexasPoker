@@ -436,11 +436,13 @@ class StrategyAgent:
 
     def _preflop_aggressor(self, game: GameEngine) -> Optional[str]:
         last = None
+        level = game.big_blind
         for act in game.action_history:
             if act.phase and act.phase != GamePhase.PRE_FLOP.value:
                 break
-            if act.type == ActionType.RAISE or act.type == ActionType.ALLIN:
+            if act.type == ActionType.RAISE or (act.type == ActionType.ALLIN and act.amount > level):
                 last = act.player_id
+                level = max(level, act.amount)
         return last
 
     # ── 通用工具 ───────────────────────────────────────────────────

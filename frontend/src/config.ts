@@ -1,11 +1,8 @@
-// 服务器配置
-// 生产环境使用服务器地址，开发环境使用 localhost
-const isProduction = window.location.hostname !== 'localhost';
-
-export const API_BASE_URL = isProduction
-  ? `http://${window.location.hostname}:8000`
-  : 'http://localhost:8000';
-
-export const WS_BASE_URL = isProduction
-  ? `ws://${window.location.hostname}:8000`
-  : 'ws://localhost:8000';
+// Override REACT_APP_API_URL for a separate API host; otherwise use a same-origin
+// reverse proxy in production and port 8000 during local development.
+const local = process.env.NODE_ENV === 'development' &&
+  ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname);
+export const API_BASE_URL = (process.env.REACT_APP_API_URL || (
+  local ? `${window.location.protocol}//${window.location.hostname}:8000` : window.location.origin
+)).replace(/\/$/, '');
+export const WS_BASE_URL = API_BASE_URL.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:');

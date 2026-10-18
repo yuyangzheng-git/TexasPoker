@@ -137,7 +137,8 @@ class PublicStatsTracker:
         """在 process_action 成功后调用。"""
         if not self._active or player_id not in self._flags:
             return
-        phase = game.action_history[-1].phase if game.action_history else game.phase.value
+        action = game.action_history[-1] if game.action_history else None
+        phase = action.phase if action else game.phase.value
         if phase != self._phase:
             # 进入新的下注轮：街注从 0 开始
             self._phase = phase
@@ -153,7 +154,9 @@ class PublicStatsTracker:
         prev_street_bet = self._street_bet
         increased = game.street_bet > prev_street_bet + 1e-9
         my_bet_after = player.current_bet if player else 0.0
-        if action_type in (ActionType.FOLD, ActionType.CHECK):
+        if action is not None and action.player_bet_before is not None:
+            facing = action.street_bet_before > action.player_bet_before + 1e-9
+        elif action_type in (ActionType.FOLD, ActionType.CHECK):
             facing = prev_street_bet > my_bet_after + 1e-9
         else:
             facing = action_type == ActionType.CALL or (
@@ -180,6 +183,20 @@ class PublicStatsTracker:
                 if action_type == ActionType.FOLD:
                     st.folds_to_bet += 1
         self._street_bet = max(self._street_bet, float(game.street_bet))
+
+    def observe_phase(self, game: GameEngine):
+        """Track dealt streets even when an all-in runout has no player actions."""
+        if not self._active:
+            return
+        phase = game.phase.value
+        if phase != self._phase:
+            self._phase = phase
+            self._street_bet = float(game.street_bet)
+        if len(game.community_cards) >= 3:
+            for pid, flags in self._flags.items():
+                player = game._get_player(pid)
+                if player is not None and player.status.value != "folded":
+                    flags.saw_flop = True
 
     def end_hand(self, game: GameEngine):
         if not self._active:

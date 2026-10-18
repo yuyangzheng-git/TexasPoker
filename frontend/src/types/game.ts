@@ -90,7 +90,7 @@ export interface ChatMessage {
 }
 
 export interface UIState {
-  expandedAgents: Set<string>;
+  expandedAgents: string[];
   selectedPlayer?: string;
   showChatHistory: boolean;
 }

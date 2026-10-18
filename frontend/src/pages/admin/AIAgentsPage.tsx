@@ -61,8 +61,8 @@ const AIAgentsPage: React.FC = () => {
   return (
     <div className="p-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">AI Agent Configuration</h1>
-        <p className="text-gray-400 mt-1">Manage AI opponent settings and behavior</p>
+        <h1 className="text-3xl font-bold text-white">AI 对手</h1>
+        <p className="text-gray-400 mt-1">管理角色配置、策略偏好与启用状态</p>
       </div>
 
       {error && (
@@ -83,7 +83,7 @@ const AIAgentsPage: React.FC = () => {
             onChange={(e) => setIncludeInactive(e.target.checked)}
             className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500"
           />
-          <span className="text-gray-300">Show inactive agents</span>
+          <span className="text-gray-300">显示停用角色</span>
         </label>
       </div>
 
@@ -121,23 +121,23 @@ const AIAgentsPage: React.FC = () => {
 
               <div className="space-y-2 mb-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Style</span>
+                  <span className="text-gray-400">风格</span>
                   <span className="text-white">{agent.style || '-'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Temperature</span>
+                  <span className="text-gray-400">随机程度</span>
                   <span className="text-white">{agent.temperature}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">VPIP Target</span>
+                  <span className="text-gray-400">VPIP 目标</span>
                   <span className="text-white">{(agent.vpip_target * 100).toFixed(0)}%</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">PFR Target</span>
+                  <span className="text-gray-400">PFR 目标</span>
                   <span className="text-white">{(agent.pfr_target * 100).toFixed(0)}%</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-400">Risk Profile</span>
+                  <span className="text-gray-400">风险偏好</span>
                   <span className="text-white">{agent.risk_profile || '-'}</span>
                 </div>
               </div>
@@ -164,7 +164,7 @@ const AIAgentsPage: React.FC = () => {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Name
+                  名称
                 </label>
                 <input
                   type="text"
@@ -176,7 +176,7 @@ const AIAgentsPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Style
+                  风格
                 </label>
                 <input
                   type="text"
@@ -234,19 +234,19 @@ const AIAgentsPage: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Risk Profile
+                  风险偏好
                 </label>
                 <select
                   value={editForm.risk_profile || ''}
                   onChange={(e) => setEditForm({ ...editForm, risk_profile: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
                 >
-                  <option value="">Select...</option>
-                  <option value="tight-passive">Tight Passive</option>
-                  <option value="tight-aggressive">Tight Aggressive</option>
-                  <option value="loose-passive">Loose Passive</option>
-                  <option value="loose-aggressive">Loose Aggressive</option>
-                  <option value="balanced">Balanced</option>
+                  <option value="">请选择</option>
+                  <option value="tight-passive">紧弱型</option>
+                  <option value="tight-aggressive">紧凶型</option>
+                  <option value="loose-passive">松弱型</option>
+                  <option value="loose-aggressive">松凶型</option>
+                  <option value="balanced">均衡型</option>
                 </select>
               </div>
 
@@ -258,7 +258,7 @@ const AIAgentsPage: React.FC = () => {
                     onChange={(e) => setEditForm({ ...editForm, is_active: e.target.checked })}
                     className="w-5 h-5 rounded bg-gray-700 border-gray-600 text-purple-600 focus:ring-purple-500"
                   />
-                  <span className="text-gray-300">Agent Active</span>
+                  <span className="text-gray-300">启用角色</span>
                 </label>
               </div>
             </div>
@@ -275,7 +275,7 @@ const AIAgentsPage: React.FC = () => {
                 onClick={() => setEditingAgent(null)}
                 className="flex-1 px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
               >
-                Cancel
+                取消
               </button>
             </div>
           </div>

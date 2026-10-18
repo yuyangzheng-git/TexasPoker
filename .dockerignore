@@ -1,0 +1,17 @@
+.git
+.env
+**/.env
+**/.env.*
+**/node_modules
+**/build
+**/venv
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+**/*.db
+**/*.db-*
+**/*.log
+logs
+data
+.DS_Store

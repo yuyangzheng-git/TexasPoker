@@ -1,0 +1,17 @@
+export const AGENT_OPTIONS = [
+  { id: "laowang",  name: "老王",     difficulty: "easy",   style: "超级保守",  desc: "只打强牌，极少虚张声势" },
+  { id: "dushen",   name: "赌神",     difficulty: "hard",   style: "极度激进",  desc: "频繁大注施压，永不服输" },
+  { id: "jiaoshou", name: "教授",     difficulty: "medium", style: "数学分析",  desc: "精通概率论，理性决策" },
+  { id: "xiaoli",   name: "小李",     difficulty: "easy",   style: "随机不稳",  desc: "决策不稳定，容易被激将" },
+  { id: "pukelian", name: "扑克脸",   difficulty: "medium", style: "欺骗型",    desc: "擅长 Bluff，误导对手" },
+  { id: "meimei",   name: "美美",     difficulty: "easy",   style: "社交型",    desc: "享受游戏氛围，打牌开心" },
+  { id: "luobo",    name: "萝卜头",   difficulty: "easy",   style: "位置意识",  desc: "后位激进，前位谨慎" },
+  { id: "laohu",    name: "老虎",     difficulty: "medium", style: "紧凶型",    desc: "精选起手牌，强势出击" },
+  { id: "xiaoming", name: "小明",     difficulty: "easy",   style: "跟注站",    desc: "喜欢看牌，难被吓跑" },
+  { id: "nvwang",   name: "女王",     difficulty: "hard",   style: "读牌高手",  desc: "擅长分析对手行为" },
+  { id: "guanjun",  name: "世界冠军", difficulty: "hard",   style: "全能型",    desc: "三届金手链，深不可测" },
+  { id: "wangzhe",  name: "网络之王", difficulty: "hard",   style: "GTO机器",   desc: "多桌碾压，数学最优" },
+  { id: "kuangmo",  name: "狂魔",     difficulty: "medium", style: "超级激进",  desc: "疯狂进攻，500万粉主播" },
+  { id: "lengxue",  name: "冷血",     difficulty: "hard",   style: "精算剥削",  desc: "冷酷无情，漏洞猎手" },
+  { id: "laoqian",  name: "千王",     difficulty: "medium", style: "心理操控",  desc: "微表情大师，读心专家" },
+];

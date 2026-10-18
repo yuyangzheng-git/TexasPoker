@@ -1,95 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-    <meta name="theme-color" content="#0F1923" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="screen-orientation" content="landscape" />
-    <title>Poker LLM Agent Game</title>
-    <style>
-      /* 移动端横屏提示遮罩 */
-      #rotate-prompt {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: #0F1923;
-        z-index: 99999;
-        justify-content: center;
-        align-items: center;
-        flex-direction: column;
-        color: white;
-        font-family: system-ui, -apple-system, sans-serif;
-      }
-      #rotate-prompt .icon {
-        font-size: 64px;
-        animation: rotate-phone 1.5s ease-in-out infinite;
-        margin-bottom: 20px;
-      }
-      #rotate-prompt .text {
-        font-size: 18px;
-        color: #67e8f9;
-      }
-      @keyframes rotate-phone {
-        0%, 100% { transform: rotate(0deg); }
-        50% { transform: rotate(90deg); }
-      }
-      /* 仅在移动端竖屏时显示 */
-      @media screen and (max-width: 900px) and (orientation: portrait) {
-        #rotate-prompt {
-          display: flex !important;
-        }
-        #root {
-          display: none !important;
-        }
-      }
-    </style>
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1412" />
+    <meta name="description" content="Texas Poker — 与 AI 对手切磋，在每一手模拟牌局中找到自己的节奏。" />
+    <title>Texas Poker · 扑克俱乐部</title>
   </head>
-  <body>
-    <!-- 横屏提示 -->
-    <div id="rotate-prompt">
-      <div class="icon">📱</div>
-      <div class="text">请旋转设备至横屏模式</div>
-    </div>
-    <div id="root"></div>
-    <script>
-      // 移动端自动请求全屏
-      function requestFullscreen() {
-        const elem = document.documentElement;
-        if (elem.requestFullscreen) {
-          elem.requestFullscreen().catch(() => {});
-        } else if (elem.webkitRequestFullscreen) {
-          elem.webkitRequestFullscreen();
-        } else if (elem.msRequestFullscreen) {
-          elem.msRequestFullscreen();
-        }
-      }
-
-      // 锁定横屏方向
-      function lockLandscape() {
-        if (screen.orientation && screen.orientation.lock) {
-          screen.orientation.lock('landscape').catch(() => {});
-        }
-      }
-
-      // 检测是否为移动设备
-      function isMobile() {
-        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-      }
-
-      // 首次触摸时进入全屏
-      if (isMobile()) {
-        document.addEventListener('touchstart', function onFirstTouch() {
-          requestFullscreen();
-          lockLandscape();
-          document.removeEventListener('touchstart', onFirstTouch);
-        }, { once: true });
-      }
-    </script>
-  </body>
+  <body><noscript>请开启 JavaScript 以使用扑克俱乐部。</noscript><div id="root"></div></body>
 </html>

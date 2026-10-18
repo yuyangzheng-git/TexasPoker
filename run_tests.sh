@@ -15,7 +15,7 @@ if [ ! -d "venv" ]; then
     python3 -m venv venv
 fi
 source venv/bin/activate
-pip install pytest -q
+pip install -r requirements.txt pytest -q
 
 cd ../tests
 echo ""

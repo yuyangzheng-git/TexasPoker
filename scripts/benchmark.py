@@ -123,7 +123,7 @@ class MCBaselineAgent(BaseAgent):
 
         pot_odds = to_call / (game.pot + to_call) if (game.pot + to_call) > 0 else 0.0
         if equity > pot_odds + 0.10 and ActionType.RAISE in valid:
-            amount = max(game.street_bet * 2, game.big_blind)
+            amount = game.minimum_raise_to()
             return Decision(self.valid_or_fallback(
                 game, player, Action(player.id, ActionType.RAISE, amount=amount)),
                 actual_agent=self.agent_type)
@@ -143,7 +143,7 @@ class RandomAgent(BaseAgent):
         valid = game.get_valid_actions(player)
         action_type = random.choice(valid)
         if action_type == ActionType.RAISE:
-            amount = max(game.street_bet * 2, game.big_blind)
+            amount = game.minimum_raise_to()
             return Decision(Action(player.id, ActionType.RAISE, amount=amount),
                             actual_agent=self.agent_type)
         if action_type == ActionType.ALLIN:
@@ -356,10 +356,11 @@ async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent],
                 record["preflop_raise"] = True
 
             record["actions"][action.type.value] += 1
-            engine.process_action(action)
-
+            if not engine.process_action(action):
+                raise RuntimeError(f"Benchmark produced an illegal action: {action}")
             if tracker is not None:
                 tracker.observe(engine, player.id, action.type)
+
             if len(engine.non_folded_players()) <= 1:
                 break
 
@@ -368,6 +369,8 @@ async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent],
 
         if engine.phase not in (GamePhase.SHOWDOWN, GamePhase.ENDED):
             engine.advance_phase()
+            if tracker is not None:
+                tracker.observe_phase(engine)
 
     # Run out remaining streets when everyone is all-in
     while (
@@ -376,6 +379,8 @@ async def play_hand(engine: GameEngine, seats: Dict[str, BaseAgent],
         and len(engine.non_folded_players()) > 1
     ):
         engine.advance_phase()
+        if tracker is not None:
+            tracker.observe_phase(engine)
 
     allocations = engine.determine_winners()
     if tracker is not None:

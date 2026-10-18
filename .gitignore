@@ -12,3 +12,7 @@ logs/
 # Generated experiment artifacts (regenerate via scripts/benchmark.py)
 data/benchmark_results.csv
 data/preflop_equity_table.json
+
+# Local runtime databases and test caches
+*.db
+.pytest_cache/

@@ -1,9 +1,7 @@
-import { enableMapSet } from "immer";
 import { configureStore } from "@reduxjs/toolkit";
 import gameReducer from "./gameSlice";
 import authReducer from "./authSlice";
 
-enableMapSet();
 
 export const store = configureStore({
   reducer: {
