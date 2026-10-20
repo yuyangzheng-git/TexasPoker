@@ -7,12 +7,12 @@
 - 公开入口：`http://101.35.6.63:3001`
 - 当前发布：`/opt/texaspoker/current` → `/opt/texaspoker/releases/20261018-01`
 - 后端服务：`texaspoker-api.service`，仅监听 `127.0.0.1:18001`
-- 持久账号库：`/opt/texaspoker/shared/data/poker.db`
+- 旧账号库：`/opt/texaspoker/shared/data/poker.db`（已停用，仅作存档）
 - 持久对局日志：`/opt/texaspoker/shared/logs`
 - 私密环境配置：`/opt/texaspoker/shared/server.env`，不要提交或公开
 - 旧版配置与数据库备份：`/opt/texaspoker/backups/pre-20261018`
 
-旧项目目录 `/var/www/poker-game` 保留。旧的 `poker-backend.service` 已停用，原占用 8000 的扑克进程已退出。其他项目的服务与端口继续使用原配置。当前部署保留原有账号，新版登录签名密钥会使旧登录会话失效，需要重新登录。
+旧项目目录 `/var/www/poker-game` 保留。旧的 `poker-backend.service` 已停用，原占用 8000 的扑克进程已退出。其他项目的服务与端口继续使用原配置。当前版本为纯游客模式：不再提供注册、登录、个人页或后台管理，旧账号库不再读取，`JWT_SECRET_KEY` 等账号相关配置可以删除。
 
 维护与验收（在服务器执行）：
 
@@ -46,7 +46,7 @@ curl --fail http://127.0.0.1:8080/api/health
 docker compose exec -T api python /app/deploy/smoke_test.py http://web:8080
 ```
 
-默认入口为 `http://服务器IP:8080`。服务器防火墙/云安全组需要允许所选入口端口。后端 8000 不发布到主机。`HTTP_PORT` 可改为其他空闲端口。数据库和对局日志放在独立持久卷，容器重建后保留。
+默认入口为 `http://服务器IP:8080`。服务器防火墙/云安全组需要允许所选入口端口。后端 8000 不发布到主机。`HTTP_PORT` 可改为其他空闲端口。对局日志放在独立持久卷，容器重建后保留。
 
 默认 `POKER_AGENT_MODE=strategy`，使用各角色的本地策略，不需要 API 密钥。要启用付费模型，在服务器 `.env` 中设置 `POKER_AGENT_MODE=llm` 和 `ANTHROPIC_API_KEY`，确认 `ANTHROPIC_BASE_URL` 是所选兼容服务的地址，再重新启动。密钥不进入前端构建与镜像。
 
@@ -71,15 +71,13 @@ location / {
 
 ## 更新、备份与恢复
 
-每次更新前保留旧发布目录和镜像，先备份数据，再执行 `docker compose up -d --build --wait`。不要执行 `docker compose down -v`，它会删除持久数据。
+每次更新前保留旧发布目录和镜像，先备份日志，再执行 `docker compose up -d --build --wait`。不要执行 `docker compose down -v`，它会删除持久数据。
 
 ```sh
 mkdir -p backups
-docker compose exec -T api python -c "import sqlite3; s=sqlite3.connect('/app/data/poker.db'); d=sqlite3.connect('/app/data/poker-backup.db'); s.backup(d); d.close(); s.close()"
-docker compose cp api:/app/data/poker-backup.db backups/poker-backup.db
 docker compose cp api:/app/logs backups/logs
 ```
 
-另行安全保存服务器 `.env`（内含登录签名密钥）。需要恢复时，先停止服务，通过临时维护容器将备份数据库恢复到 `poker_data` 卷中的 `poker.db`，保持 uid/gid `10001:10001`，再启动服务。切回旧版本时使用旧发布目录/镜像并保留同一组卷。
+另行保存服务器 `.env`。切回旧版本时使用旧发布目录/镜像并保留同一组卷。
 
-仅运行一个后端工作进程：当前牌桌存在内存中，重启会终止正在进行的对局；已注册账号和落盘日志保留。Nginx 为建桌和登录提供基础频率限制。
+仅运行一个后端工作进程：当前牌桌存在内存中，重启会终止正在进行的对局；落盘日志保留。Nginx 为建桌提供基础频率限制。

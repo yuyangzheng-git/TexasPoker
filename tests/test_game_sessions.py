@@ -4,13 +4,8 @@ from types import SimpleNamespace
 import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 import main
-from database.connection import get_db
-from database.models import Base
 from game_engine import Action, ActionType
 from game_logger import GameLogger
 
@@ -31,22 +26,10 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(main, 'LLMAgent', CallingAgent)
     monkeypatch.setattr(main.random, 'shuffle', lambda players: None)
     monkeypatch.setattr(main, 'GameLogger', lambda game_id: GameLogger(game_id, str(tmp_path)))
-    monkeypatch.setattr(main, 'init_db', lambda: None)
     main.active_games.clear()
-    engine = create_engine('sqlite://', connect_args={'check_same_thread': False}, poolclass=StaticPool)
-    Base.metadata.create_all(engine)
-    factory = sessionmaker(bind=engine)
-
-    def db():
-        with factory() as session:
-            yield session
-
-    main.app.dependency_overrides[get_db] = db
     with TestClient(main.app) as result:
         yield result
-    main.app.dependency_overrides.clear()
     main.active_games.clear()
-    engine.dispose()
 
 
 def create(client):
@@ -196,10 +179,11 @@ def test_full_hand_hides_private_cards_and_reasoning_until_result(client):
         assert next_hand['handNumber'] == 2
 
 
-def test_full_logs_are_not_public(client):
-    assert client.get('/api/logs').status_code in (401, 403)
-    assert client.get('/api/logs/private.json').status_code in (401, 403)
-    assert client.get('/api/logs/private.json/summary').status_code in (401, 403)
+def test_private_logs_and_account_endpoints_are_not_served(client):
+    for path in ('/api/logs', '/api/logs/private.json', '/api/logs/private.json/summary',
+                 '/api/auth/me', '/api/admin/users'):
+        assert client.get(path).status_code == 404
+    assert client.post('/api/auth/login', json={}).status_code == 404
 
 
 @pytest.mark.parametrize('body', [{'table_size': 100}, {'table_size': 'bad'},
@@ -207,20 +191,6 @@ def test_full_logs_are_not_public(client):
 def test_invalid_table_setup_is_rejected(client, body):
     assert client.post('/api/games', json=body).status_code == 422
     assert not main.active_games
-
-
-def test_register_login_and_private_profile_work_with_unicode_password(client):
-    password = '密' * 50
-    response = client.post('/api/auth/register', json={
-        'username': 'test_player', 'email': 'player@example.com', 'password': password,
-    })
-    assert response.status_code == 201, response.text
-    response = client.post('/api/auth/login', json={'username': 'test_player', 'password': password})
-    assert response.status_code == 200, response.text
-    token = response.json()['access_token']
-    response = client.get('/api/auth/me', headers={'Authorization': 'Bearer ' + token})
-    assert response.status_code == 200
-    assert response.json()['username'] == 'test_player'
 
 
 def test_human_timeout_folds_when_facing_a_bet(client):

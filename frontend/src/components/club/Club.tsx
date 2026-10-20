@@ -2,19 +2,16 @@ import React, { createContext, useContext, useEffect, useRef, useState } from 'r
 import { Link } from 'react-router-dom';
 import { API_BASE_URL } from '../../config';
 
-export type IconName = 'arrow' | 'back' | 'chevron' | 'check' | 'eye' | 'close' | 'settings' | 'sound' | 'muted' | 'history' | 'pause' | 'play' | 'user' | 'logout' | 'expand' | 'cards';
+export type IconName = 'arrow' | 'back' | 'chevron' | 'check' | 'close' | 'settings' | 'sound' | 'muted' | 'history' | 'pause' | 'play' | 'expand' | 'cards';
 const paths: Record<IconName, React.ReactNode> = {
   arrow: <><path d="M4 12h15M13 5l7 7-7 7" /></>, back: <><path d="M20 12H5m6-7-7 7 7 7" /></>,
   chevron: <path d="m6 9 6 6 6-6" />, check: <path d="m5 12 4 4L19 6" />,
-  eye: <><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" /></>,
   close: <path d="m6 6 12 12M6 18 18 6" />,
   settings: <><path d="M4 7h16M4 17h16" /><circle cx="8" cy="7" r="3" /><circle cx="16" cy="17" r="3" /></>,
   sound: <><path d="m11 4-5 4H2v8h4l5 4V4ZM15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" /></>,
   muted: <><path d="m11 4-5 4H2v8h4l5 4V4Zm5 5 6 6m0-6-6 6" /></>,
   history: <><path d="M3 10a9 9 0 1 1 2 8M3 4v6h6m3-4v6l4 2" /></>,
   pause: <><path d="M8 5v14M16 5v14" /></>, play: <path d="m8 4 12 8-12 8V4Z" />,
-  user: <><circle cx="12" cy="8" r="4" /><path d="M4 22v-3a8 8 0 0 1 16 0v3" /></>,
-  logout: <><path d="M9 4H4v16h5m4-8h9m-4-4 4 4-4 4" /></>,
   expand: <path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5" />,
   cards: <><rect x="6" y="3" width="13" height="18" rx="2" /><path d="m10 12 3-4 3 4-3 4-3-4ZM3 6v13" /></>,
 };

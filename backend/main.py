@@ -1,7 +1,7 @@
 """
 FastAPI 主入口 + WebSocket 游戏服务器
 """
-import settings  # Load config before auth/database/LLM imports.
+import settings  # Load config before LLM client imports.
 import os
 import json
 import asyncio
@@ -14,7 +14,7 @@ import re
 import unicodedata
 
 from pydantic import BaseModel, Field, field_validator
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 
@@ -24,30 +24,14 @@ from strategy_agent import StrategyAgent
 from game_logger import GameLogger
 from game_session import GameSession
 
-# Import auth and admin modules
-from database.connection import init_db
-from auth import router as auth_router
-from admin import router as admin_router
-from auth.dependencies import get_admin_user
 
 # 配置与日志目录（基于本文件位置，与运行目录无关）
 BASE_DIR = Path(__file__).resolve().parent
 CONFIG_DIR = BASE_DIR.parent / "config"
-LOG_DIR = BASE_DIR.parent / "logs"
 
 load_dotenv(CONFIG_DIR / ".env")
 
 app = FastAPI(title="Poker LLM Agent API")
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    init_db()
-    print("Database initialized successfully")
-
-# Register auth and admin routers
-app.include_router(auth_router)
-app.include_router(admin_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -223,7 +207,6 @@ async def runtime_mode():
 async def create_game(body: CreateGameRequest, request: Request):
     """创建新牌局"""
     import uuid
-    import json
 
     body = body.model_dump()
     game_id = str(uuid.uuid4())
@@ -351,103 +334,6 @@ async def create_game(body: CreateGameRequest, request: Request):
         "wsUrl": str(request.base_url).replace("https://", "wss://").replace("http://", "ws://").rstrip("/") + f"/ws/{game_id}",
         "players": [{"id": p.id, "name": p.name, "stack": p.stack} for p in players]
     }
-
-
-# ─── 日志 API ─────────────────────────────────────────────────────────
-
-
-@app.get("/api/logs")
-async def list_logs(limit: int = 20, admin=Depends(get_admin_user)):
-    """列出所有游戏日志"""
-    if not LOG_DIR.exists():
-        return {"logs": []}
-
-    log_files = sorted(LOG_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)
-    logs = []
-
-    for log_file in log_files[:limit]:
-        try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                logs.append({
-                    "filename": log_file.name,
-                    "game_id": data.get("game_id"),
-                    "created_at": data.get("created_at"),
-                    "total_hands": len(data.get("hands", [])),
-                    "players": [p.get("name") for p in data.get("players", [])],
-                    "final_result": data.get("final_result"),
-                })
-        except Exception:
-            continue
-
-    return {"logs": logs}
-
-
-@app.get("/api/logs/{filename}")
-async def get_log(filename: str, admin=Depends(get_admin_user)):
-    """获取特定日志详情"""
-    log_file = (LOG_DIR / filename).resolve()
-    if log_file.parent != LOG_DIR.resolve() or log_file.suffix != ".json":
-        raise HTTPException(status_code=404, detail="Log not found")
-    if not log_file.exists():
-        raise HTTPException(status_code=404, detail="Log not found")
-
-    try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get("/api/logs/{filename}/summary")
-async def get_log_summary(filename: str, admin=Depends(get_admin_user)):
-    """获取日志摘要"""
-    log_file = (LOG_DIR / filename).resolve()
-    if log_file.parent != LOG_DIR.resolve() or log_file.suffix != ".json":
-        raise HTTPException(status_code=404, detail="Log not found")
-    if not log_file.exists():
-        raise HTTPException(status_code=404, detail="Log not found")
-
-    try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        total_hands = len(data.get("hands", []))
-        player_stats = {}
-
-        for hand in data.get("hands", []):
-            result = hand.get("result")
-            if result and result.get("allocations"):
-                for alloc in result["allocations"]:
-                    pid = alloc.get("player_id")
-                    pname = alloc.get("player_name")
-                    if pid not in player_stats:
-                        player_stats[pid] = {
-                            "name": pname,
-                            "hands_won": 0,
-                            "total_winnings": 0,
-                            "actions_count": 0,
-                        }
-                    if alloc.get("amount_won", 0) > 0:
-                        player_stats[pid]["hands_won"] += 1
-                        player_stats[pid]["total_winnings"] += alloc.get("amount_won", 0)
-
-            # 统计行动次数
-            for action in hand.get("actions", []):
-                pid = action.get("player_id")
-                if pid in player_stats:
-                    player_stats[pid]["actions_count"] += 1
-
-        return {
-            "game_id": data.get("game_id"),
-            "created_at": data.get("created_at"),
-            "total_hands": total_hands,
-            "players": data.get("players"),
-            "player_stats": player_stats,
-            "final_result": data.get("final_result"),
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.websocket("/ws/{game_id}")

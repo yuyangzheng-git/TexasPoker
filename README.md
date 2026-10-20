@@ -137,8 +137,9 @@ npm start
 
 ### 环境配置
 1. 复制 `config/.env.example` 为 `.env`
-2. 配置 Claude API key
-3. 配置数据库连接
+2. 配置 Claude API key（仅 `POKER_AGENT_MODE=llm` 时需要）
+
+本项目为纯游客模式：无需注册登录，也不需要数据库。
 
 ## 技术栈
 
@@ -149,7 +150,7 @@ npm start
 | 实时通信 | WebSocket (Socket.io) |
 | LLM | Claude API (claude-haiku-4-5) |
 | 缓存 | Redis |
-| 数据库 | PostgreSQL |
+| 数据库 | 无（纯游客模式，牌局保存在内存中） |
 
 ## 文档导航
 
@@ -272,7 +273,7 @@ What I fixed and verified in this repository (with automated checks):
 
 ## 服务器部署
 
-生产环境部署与验收见 [deploy/README.md](deploy/README.md)。默认使用无需 API 密钥的本地策略 AI，前后端通过同源代理连接，账号与日志使用持久卷保存。
+生产环境部署与验收见 [deploy/README.md](deploy/README.md)。默认使用无需 API 密钥的本地策略 AI，前后端通过同源代理连接，对局日志使用持久卷保存。
 
 ## 许可证
 
