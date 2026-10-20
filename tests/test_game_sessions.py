@@ -288,3 +288,17 @@ def test_game_ends_when_human_busts_even_if_several_agents_remain(client):
     assert sum(p.stack > 0 for p in engine.players) == 2
     assert 'HAND_STARTED' not in events
     assert session.finished is True
+
+
+def test_player_name_is_cleaned_to_plain_text(client):
+    response = client.post('/api/games', json={'table_size': 2, 'player_name': '  <b>小​明</b>\n  牌手 '})
+    assert response.status_code == 200, response.text
+    session = main.active_games[response.json()['gameId']]['session']
+    human = next(p for p in session.game.players if p.player_type == 'human')
+    assert human.name == 'b小明/b 牌手'
+
+
+@pytest.mark.parametrize('name', ['   ', '<>', '​​', 'x' * 17])
+def test_blank_or_overlong_player_names_are_rejected(client, name):
+    assert client.post('/api/games', json={'table_size': 2, 'player_name': name}).status_code == 422
+    assert not main.active_games

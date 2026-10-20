@@ -10,7 +10,10 @@ import secrets
 import time
 from pathlib import Path
 from typing import Dict, List, Literal
-from pydantic import BaseModel, Field
+import re
+import unicodedata
+
+from pydantic import BaseModel, Field, field_validator
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -180,8 +183,18 @@ def _auto_fill_ai(
 # ─── 游戏 API ───────────────────────────────────────────────────────────
 
 
+MAX_PLAYER_NAME = 16
+
+
+def clean_player_name(value: str) -> str:
+    """Seat names are plain text: drop control/format characters and markup brackets, collapse spaces."""
+    text = "".join(ch for ch in unicodedata.normalize("NFKC", value)
+                   if unicodedata.category(ch)[0] != "C" and ch not in "<>")
+    return re.sub(r"\s+", " ", text).strip()
+
+
 class CreateGameRequest(BaseModel):
-    player_name: str = Field(default="Player", min_length=1, max_length=50)
+    player_name: str = Field(default="Player", min_length=1, max_length=MAX_PLAYER_NAME)
     table_size: int = Field(default=9, ge=2, le=9)
     num_agents: int = Field(default=3, ge=1, le=8)
     ai_fill_enabled: bool = True
@@ -189,6 +202,11 @@ class CreateGameRequest(BaseModel):
     ai_persona_theme: Literal["aggressive", "balanced", "beginner_friendly", "random"] = "balanced"
     preferred_ai_personas: List[str] = Field(default_factory=list, max_length=8)
     agent_ids: List[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("player_name", mode="before")
+    @classmethod
+    def _clean_name(cls, value):
+        return clean_player_name(value) if isinstance(value, str) else value
 
 
 @app.get("/api/health")

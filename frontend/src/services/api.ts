@@ -104,7 +104,8 @@ export const gameApi = {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new Error((error as any).detail || "Failed to create game");
+      const detail = (error as any).detail;
+      throw new Error(typeof detail === "string" ? detail : "牌桌设置无效，请检查昵称（最多 16 字）后重试。");
     }
 
     const result: CreateGameResponse = await response.json();
