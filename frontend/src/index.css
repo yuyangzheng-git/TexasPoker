@@ -30,3 +30,9 @@
 .club-seat-label>strong{font-size:12px}.club-seat-stack{font-size:13px}.club-seat-status{font-size:11px}.club-log-byline,.club-log-item.is-system,.club-log-byline time,.club-info-tabs>button{font-size:12px}.club-agent-choice strong{font-size:12px}.club-agent-choice small{font-size:11px}.club-action-foot,.club-presets>button,.club-game-status,.club-dock-label,.club-table-street,.club-setup-summary p,.club-fine-print{font-size:12px}.club-agent-heading>span,.club-help{font-size:12px}
 @media(max-width:760px){.club-seat-label>strong{font-size:11px}.club-seat-stack{font-size:11px}.club-seat-status{font-size:10px}.club-game-status{font-size:11px}.club-table-street{font-size:10px}.club-action-foot{font-size:11px}.club-presets>button{font-size:11px}.club-game-brand .club-brand{font-size:13px}.club-game-brand .club-brand-light{display:none}}
 @media(max-width:360px){.club-seat-label>strong,.club-seat-stack{font-size:10px}.club-seat-status{font-size:9px}.club-game-status>span:last-child{font-size:10px}}
+/* Polish: preset feedback, end-of-session states, and phone layouts that keep the controls on screen */
+.club-presets>button.is-active{color:var(--club-gold);border-color:var(--club-gold);background:#cfb27b14}
+.club-result-mark.is-out{color:var(--club-danger)}
+.club-result-mark.is-champion{color:var(--club-gold-light);text-shadow:0 0 18px #cfb27b55}
+@media(max-width:760px){.club-lobby-art{display:none}.club-lobby-intro{padding:10px 0 16px}.club-lobby-intro h1{font-size:34px;margin-top:8px;line-height:1.3}.club-lobby-intro p{margin-top:10px}.club-table-stage{height:400px;min-height:400px}.club-table-stage.seats-6{height:410px;min-height:410px}.club-table-stage.seats-9{height:450px;min-height:450px}.club-player-dock{padding:12px;gap:12px}}
+@media(max-width:360px){.club-lobby-intro h1{font-size:32px}}
