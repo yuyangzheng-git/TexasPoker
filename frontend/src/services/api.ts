@@ -37,7 +37,7 @@ export const gameApi = {
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       const detail = (error as any).detail;
-      throw new Error(typeof detail === "string" ? detail : "牌桌设置无效，请检查昵称（最多 16 字）后重试。");
+      throw new Error(typeof detail === "string" ? detail : "Invalid table settings. Check your name (16 characters max) and try again.");
     }
 
     const result: CreateGameResponse = await response.json();

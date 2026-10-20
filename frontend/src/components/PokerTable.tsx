@@ -8,7 +8,7 @@ export const PokerTable: React.FC = () => {
   const game = useSelector((s: RootState) => s.game.gameState);
   const acting = useSelector((s: RootState) => s.game.currentActingPlayerId);
   const history = useSelector((s: RootState) => s.game.chatHistory);
-  if (!game) return <div className="club-table-loading"><span className="club-spinner" /><p>正在准备牌桌…</p></div>;
+  if (!game) return <div className="club-table-loading"><span className="club-spinner" /><p>Setting up the table…</p></div>;
   const humanIndex = Math.max(0, game.players.findIndex(p => p.isHuman));
   const showCards = game.phase === GamePhase.SHOWDOWN || game.phase === GamePhase.ENDED;
   return <div className={`club-table-stage seats-${game.players.length}`}><div className="club-table-rail"><div className="club-table-felt" /></div><CommunityCards cards={game.communityCards || []} pot={game.pot} phase={game.phase} streetBet={game.streetBet} />

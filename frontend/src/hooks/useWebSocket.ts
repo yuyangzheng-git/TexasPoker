@@ -23,6 +23,7 @@ import {
 } from "../store/gameSlice";
 import { ChatMessage } from "../types/game";
 import { WS_BASE_URL } from "../config";
+import { displayName } from "../components/club/agents";
 
 // 将 snake_case 字符串转为 camelCase
 function toCamel(str: string): string {
@@ -97,7 +98,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(setGameState(converted));
             dispatch(addChatMessage({
               sender: "system",
-              message: "游戏开始！",
+              message: "Game on!",
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -105,17 +106,17 @@ export const useWebSocket = (gameId: string | undefined) => {
 
           case "PHASE_CHANGED": {
             const phaseNames: Record<string, string> = {
-              pre_flop: "翻牌前",
-              flop: "翻牌",
-              turn: "转牌",
-              river: "河牌",
-              showdown: "摊牌",
+              pre_flop: "Pre-flop",
+              flop: "Flop",
+              turn: "Turn",
+              river: "River",
+              showdown: "Showdown",
             };
             const phaseName = phaseNames[converted.phase] || converted.phase;
             dispatch(updateGameState(converted));
             dispatch(addChatMessage({
               sender: "system",
-              message: `进入 ${phaseName} 阶段`,
+              message: `On to the ${phaseName}`,
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -138,11 +139,11 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(setCurrentActingPlayer(undefined));
             // 添加行动通知
             const actionNames: Record<string, string> = {
-              fold: "弃牌",
-              check: "过牌",
-              call: "跟注",
-              raise: "加注",
-              allin: "全押",
+              fold: "Fold",
+              check: "Check",
+              call: "Call",
+              raise: "Raise",
+              allin: "All-in",
             };
             const actionName = actionNames[data.action] || data.action;
             dispatch(
@@ -166,11 +167,11 @@ export const useWebSocket = (gameId: string | undefined) => {
             // 显示人类玩家的行动和放话
             if (data.playerId === "player_human" && data.action) {
               const actionNames: Record<string, string> = {
-                fold: "弃牌",
-                check: "过牌",
-                call: "跟注",
-                raise: "加注",
-                allin: "全押",
+                fold: "Fold",
+                check: "Check",
+                call: "Call",
+                raise: "Raise",
+                allin: "All-in",
               };
               const actionName = actionNames[data.action] || data.action;
               dispatch(
@@ -200,7 +201,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(setCurrentActingPlayer(data.playerId));
             dispatch(addChatMessage({
               sender: "system",
-              message: "轮到你行动了！",
+              message: "Your turn to act!",
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -222,7 +223,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(updateGameState({ phase: "showdown" as any }));
             dispatch(addChatMessage({
               sender: "system",
-              message: "🃏 所有玩家亮牌！",
+              message: "🃏 All cards revealed!",
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -243,7 +244,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             }));
             dispatch(addChatMessage({
               sender: "system",
-              message: "摊牌！公布底牌",
+              message: "Showdown! Hole cards are face up",
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -260,7 +261,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             }));
             dispatch(addChatMessage({
               sender: "system",
-              message: "本局结束",
+              message: "Hand over",
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -272,7 +273,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(setGameState(converted?.gameState || converted));
             dispatch(addChatMessage({
               sender: "system",
-              message: "新一局开始！",
+              message: "New hand dealt!",
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
@@ -284,15 +285,15 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(setGameFinished(true));
             dispatch(addChatMessage({
               sender: "system",
-              message: converted?.humanBusted ? "你的筹码已输光，本场结束。" : `比赛结束！${converted?.winner || ""}获胜！`,
+              message: converted?.humanBusted ? "You are out of chips — game over." : `Game over! ${converted?.winnerId === "player_human" ? "You win" : `${displayName(converted?.winnerId || "", converted?.winner || "The last player")} wins`}!`,
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
             break;
 
           case "ERROR":
-            dispatch(setActionError(converted?.message || "操作失败，请重试"));
-            dispatch(addChatMessage({ sender: "system", message: converted?.message || "操作失败",
+            dispatch(setActionError(converted?.message || "That action failed. Please try again."));
+            dispatch(addChatMessage({ sender: "system", message: converted?.message || "Action failed",
               timestamp: Date.now(), type: "system" }));
             break;
         }
@@ -305,12 +306,12 @@ export const useWebSocket = (gameId: string | undefined) => {
       if (wsRef.current !== ws) return;
       dispatch(setConnected(false));
       dispatch(clearPlayerActionRequest());
-      dispatch(setConnectionError("连接已断开，正在重连…"));
+      dispatch(setConnectionError("Connection lost — reconnecting…"));
       if (!stoppedRef.current && event.code !== 4403 && event.code !== 4409) {
         retryRef.current = setTimeout(connect, 1500);
       } else if (event.code === 4403 || event.code === 4409) {
         dispatch(setConnectionError(event.code === 4403
-          ? "牌局凭证失效，请从大厅重新开始。" : "此牌局已在另一个窗口打开。"));
+          ? "This table session has expired. Start again from the lobby." : "This table is already open in another window."));
       }
       console.log("WebSocket disconnected");
     };

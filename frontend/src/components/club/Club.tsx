@@ -19,7 +19,7 @@ export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <Link to="/" className={`club-brand ${compact ? 'is-compact' : ''}`} aria-label="Texas Poker 返回大厅"><span className="club-brand-mark">♠</span><span>TEXAS<span className="club-brand-light"> POKER</span><small>THE POKER CLUB</small></span></Link>;
+  return <Link to="/" className={`club-brand ${compact ? 'is-compact' : ''}`} aria-label="Texas Poker — back to lobby"><span className="club-brand-mark">♠</span><span>TEXAS<span className="club-brand-light"> POKER</span><small>THE POKER CLUB</small></span></Link>;
 }
 interface Preferences { localDemo: boolean | null; sound: boolean; motion: boolean; fourColor: boolean; setSound: (v: boolean) => void; setMotion: (v: boolean) => void; setFourColor: (v: boolean) => void }
 const ClubContext = createContext<Preferences>({ localDemo: null, sound: true, motion: true, fourColor: false, setSound: () => {}, setMotion: () => {}, setFourColor: () => {} });
@@ -35,17 +35,25 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
   return <ClubContext.Provider value={{ localDemo, sound, motion, fourColor, setSound: v => save('poker_sound', v, changeSound), setMotion: v => save('poker_motion', v, changeMotion), setFourColor: v => save('poker_four_color', v, changeFourColor) }}>{children}</ClubContext.Provider>;
 }
 export const useClub = () => useContext(ClubContext);
-export function ModeBadge() { const { localDemo } = useClub(); return <span className="club-mode"><span />{localDemo ? '策略 AI 对局' : 'AI 对局'}</span>; }
+export function ModeBadge() { const { localDemo } = useClub(); return <span className="club-mode"><span />{localDemo ? 'Strategy AI' : 'AI table'}</span>; }
 export function ClubHeader({ children }: { children?: React.ReactNode }) { return <header className="club-header"><Brand /><nav className="club-header-actions">{children}</nav></header>; }
 export function PreferencesPanel() {
   const { sound, motion, fourColor, setSound, setMotion, setFourColor } = useClub();
-  return <div className="club-preferences">{[{ label: '游戏音效', desc: '轻量提示音，默认关闭', value: sound, set: setSound }, { label: '界面动效', desc: '发牌与界面过渡', value: motion, set: setMotion }, { label: '四色牌面', desc: '用颜色辅助区分花色', value: fourColor, set: setFourColor }].map(item => <label key={item.label} className="club-preference"><span><strong>{item.label}</strong><small>{item.desc}</small></span><input type="checkbox" className="club-switch" checked={item.value} onChange={e => item.set(e.target.checked)} /></label>)}</div>;
+  return <div className="club-preferences">{[{ label: 'Sound effects', zh: '游戏音效', desc: 'Subtle cues, off by default', value: sound, set: setSound }, { label: 'Motion', zh: '界面动效', desc: 'Dealing and screen transitions', value: motion, set: setMotion }, { label: 'Four-color deck', zh: '四色牌面', desc: 'Color helps tell the suits apart', value: fourColor, set: setFourColor }].map(item => <label key={item.label} className="club-preference"><span><strong>{item.label}<Zh inline>{item.zh}</Zh></strong><small>{item.desc}</small></span><input type="checkbox" className="club-switch" checked={item.value} onChange={e => item.set(e.target.checked)} /></label>)}</div>;
 }
-export const chips = (n: number) => new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 0 }).format(n || 0);
-export const phaseName: Record<string, string> = { pre_flop: '翻牌前', flop: '翻牌', turn: '转牌', river: '河牌', showdown: '摊牌', ended: '本手结束' };
+export const chips = (n: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(n || 0);
+export const phaseName: Record<string, string> = { pre_flop: 'Pre-flop', flop: 'Flop', turn: 'Turn', river: 'River', showdown: 'Showdown', ended: 'Hand over' };
+export const phaseNameZh: Record<string, string> = { pre_flop: '翻牌前', flop: '翻牌', turn: '转牌', river: '河牌', showdown: '摊牌', ended: '本手结束' };
+// The server names hand ranks in Chinese; show the English name first.
+export const handRankName: Record<string, string> = { 皇家同花顺: 'Royal Flush', 同花顺: 'Straight Flush', 四条: 'Four of a Kind', 葫芦: 'Full House', 同花: 'Flush', 顺子: 'Straight', 三条: 'Three of a Kind', 两对: 'Two Pair', 一对: 'One Pair', 高牌: 'High Card' };
 
-export function ClubDialog({ title, children, onClose }: { title: string; children: React.ReactNode; onClose: () => void }) {
+// Secondary Chinese label shown under (or, inline, beside) the English text.
+export function Zh({ children, inline = false }: { children: React.ReactNode; inline?: boolean }) {
+  return <span className={`club-zh ${inline ? 'is-inline' : ''}`} lang="zh-CN">{children}</span>;
+}
+
+export function ClubDialog({ title, titleZh, children, onClose }: { title: string; titleZh?: string; children: React.ReactNode; onClose: () => void }) {
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => { const dialog = ref.current; dialog?.showModal(); return () => dialog?.close(); }, []);
-  return <dialog ref={ref} className="club-dialog club-native-dialog" aria-label={title} onCancel={e => { e.preventDefault(); onClose(); }}><div className="club-section-head"><h2>{title}</h2><button className="club-icon-btn" aria-label="关闭设置" onClick={onClose}><Icon name="close" /></button></div>{children}</dialog>;
+  return <dialog ref={ref} className="club-dialog club-native-dialog" aria-label={title} onCancel={e => { e.preventDefault(); onClose(); }}><div className="club-section-head"><h2>{title}{titleZh && <Zh>{titleZh}</Zh>}</h2><button className="club-icon-btn" aria-label="Close" onClick={onClose}><Icon name="close" /></button></div>{children}</dialog>;
 }

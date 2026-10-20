@@ -228,7 +228,7 @@ class GameSession:
             winner = max(self.game.players, key=lambda p: p.stack)
             self.logger.log_tournament_end(winner.name, {p.id: p.stack for p in self.game.players})
             await self.send("TOURNAMENT_ENDED", {
-                "winner": winner.name, "finalStacks": {p.id: p.stack for p in self.game.players},
+                "winner": winner.name, "winnerId": winner.id, "finalStacks": {p.id: p.stack for p in self.game.players},
                 "humanBusted": self.human_busted(),
             })
         except asyncio.CancelledError:

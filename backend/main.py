@@ -287,7 +287,7 @@ async def create_game(body: CreateGameRequest, request: Request):
     if total_players < 2:
         raise HTTPException(
             status_code=400,
-            detail=f"至少需要 2 名玩家（当前真人: {human_count}, AI: {len(all_selected_personas)}）"
+            detail=f"At least 2 players are needed (humans: {human_count}, AI: {len(all_selected_personas)})."
         )
 
     for persona in all_selected_personas:
