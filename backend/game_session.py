@@ -34,6 +34,13 @@ class GameSession:
     def snapshot(self):
         return self.game.get_state_snapshot(self.human_id)
 
+    def human_busted(self):
+        return self.game._get_player(self.human_id).stack <= 0
+
+    def session_over(self):
+        # A single-human practice table ends once the human is out, even if AIs remain.
+        return self.human_busted() or len([p for p in self.game.players if p.stack > 0]) <= 1
+
     async def send(self, event, data):
         if self.socket is not None:
             try:
@@ -132,7 +139,7 @@ class GameSession:
     async def run(self):
         hand_number = 0
         try:
-            while len([p for p in self.game.players if p.stack > 0]) > 1:
+            while not self.session_over():
                 # Do not spend API calls on an abandoned table.
                 while self.socket is None:
                     await asyncio.sleep(0.2)
@@ -213,7 +220,7 @@ class GameSession:
                     "event": "SHOWDOWN" if showdown else "GAME_ENDED",
                     "allocations": allocations, "finalState": self.snapshot(),
                 }
-                if len([p for p in self.game.players if p.stack > 0]) <= 1:
+                if self.session_over():
                     await self.send(self.result["event"], self.result)
                     break
                 await self.wait_for_next_hand()
@@ -222,6 +229,7 @@ class GameSession:
             self.logger.log_tournament_end(winner.name, {p.id: p.stack for p in self.game.players})
             await self.send("TOURNAMENT_ENDED", {
                 "winner": winner.name, "finalStacks": {p.id: p.stack for p in self.game.players},
+                "humanBusted": self.human_busted(),
             })
         except asyncio.CancelledError:
             raise

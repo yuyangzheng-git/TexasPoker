@@ -250,3 +250,41 @@ def test_human_timeout_checks_when_no_bet_is_due(client):
         action = until(ws, 'PLAYER_ACTION')
         assert action['playerId'] == 'player_human'
         assert action['action'] == 'check'
+
+
+def test_game_ends_when_human_busts_even_if_several_agents_remain(client):
+    from game_engine import Card
+    response = client.post('/api/games', json={'table_size': 3})
+    assert response.status_code == 200, response.text
+    game = response.json()
+    session = main.active_games[game['gameId']]['session']
+    engine = session.game
+    human = next(p for p in engine.players if p.player_type == 'human')
+    human.stack = engine.big_blind
+    # Human 7-2 offsuit against aces and kings on a dry board: the human always loses.
+    dealt = [Card(7, 0), Card(2, 1), Card(14, 0), Card(14, 1), Card(13, 2), Card(13, 3),
+             Card(9, 2), Card(4, 3), Card(11, 1), Card(3, 0), Card(12, 1)]
+    order = [p for p in engine.players]
+    assert order[0] is human
+    filler = [c for c in engine._build_deck() if (c.rank, c.suit) not in {(d.rank, d.suit) for d in dealt}]
+    engine._shuffle_deck = lambda deck: filler + list(reversed(dealt))
+    events = []
+    with connect(client, game) as ws:
+        auth(ws, game)
+        for _ in range(200):
+            message = ws.receive_json()
+            event, data = message['type'], message['data']
+            events.append(event)
+            if event == 'PLAYER_ACTION_REQUEST':
+                kind = 'check' if 'check' in data['validActions'] else (
+                    'call' if 'call' in data['validActions'] else 'allin')
+                ws.send_json({'type': 'ACTION', 'requestId': data['requestId'], 'action': kind})
+            if event == 'TOURNAMENT_ENDED':
+                assert data['humanBusted'] is True
+                break
+        else:
+            raise AssertionError(f'Game kept running after the human busted: {events[-10:]}')
+    assert human.stack == 0
+    assert sum(p.stack > 0 for p in engine.players) == 2
+    assert 'HAND_STARTED' not in events
+    assert session.finished is True

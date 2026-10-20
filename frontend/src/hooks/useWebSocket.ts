@@ -284,7 +284,7 @@ export const useWebSocket = (gameId: string | undefined) => {
             dispatch(setGameFinished(true));
             dispatch(addChatMessage({
               sender: "system",
-              message: `比赛结束！${converted?.winner || ""}获胜！`,
+              message: converted?.humanBusted ? "你的筹码已输光，本场结束。" : `比赛结束！${converted?.winner || ""}获胜！`,
               timestamp: Date.now(),
               type: "system",
             } as ChatMessage));
